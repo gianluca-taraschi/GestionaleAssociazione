@@ -1,0 +1,385 @@
+﻿@page "/associati"
+@using Gestionale_Drian.Data
+@using Gestionale_Drian.Services
+@using BlazorBootstrap
+@inject AssociatiService AssociatiService
+@inject ProgettiService ProgettiService
+@inject NavigationManager NavManager
+@inject ToastService ToastService
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="m-0 text-primary fw-bold"><i class="bi bi-people-fill me-2"></i> Gestione Associati</h3>
+    
+    <div class="d-flex gap-2">
+        <div class="input-group w-auto shadow-sm">
+            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+            <input type="text" class="form-control" placeholder="Cerca nome o cognome..." @bind="testoRicerca" @bind:event="oninput" style="max-width: 250px;" />
+        </div>
+        @if (!mostraForm)
+        {
+            <Button Color="ButtonColor.Primary" Class="shadow-sm" @onclick="ApriFormNuovo">
+                <Icon Name="IconName.PersonPlusFill" /> Nuovo Associato
+            </Button>
+        }
+    </div>
+</div>
+
+@if (mostraForm)
+{
+    <div class="card border-primary mb-4 shadow-sm">
+        <div class="card-header bg-primary text-white fw-bold">
+            @(associatoCorrente.Id == 0 ? "Nuovo Associato" : $"Modifica Associato: {associatoCorrente.Nome} {associatoCorrente.Cognome}")
+        </div>
+        <div class="card-body">
+            <div class="row g-3 mb-3">
+                <div class="col-md-3">
+                    <label class="form-label text-secondary fw-bold">N° Tessera</label>
+                    <input type="text" class="form-control" @bind="associatoCorrente.NumeroTessera" placeholder="Es. 2024-001" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label text-secondary fw-bold">Nome *</label>
+                    <input type="text" class="form-control" @bind="associatoCorrente.Nome" placeholder="Inserisci il nome" />
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label text-secondary fw-bold">Cognome *</label>
+                    <input type="text" class="form-control" @bind="associatoCorrente.Cognome" placeholder="Inserisci il cognome" />
+                </div>
+            </div>
+
+            <div class="row g-3 mb-3">
+                <div class="col-md-3">
+                    <label class="form-label text-secondary fw-bold">Data di Nascita</label>
+                    <input type="date" class="form-control" @bind="associatoCorrente.DataDiNascita" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label text-secondary fw-bold">Cellulare</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-telephone"></i></span>
+                        <input type="tel" class="form-control" @bind="associatoCorrente.Cellulare" placeholder="Es. 333 1234567" />
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label text-secondary fw-bold">Indirizzo E-Mail</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                        <input type="email" class="form-control" @bind="associatoCorrente.Email" placeholder="email@esempio.com" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-3">
+                <div class="col-md-12">
+                    <label class="form-label text-secondary fw-bold">Indirizzo Residenza / Domicilio</label>
+                    <input type="text" class="form-control" @bind="associatoCorrente.Indirizzo" placeholder="Via, CAP, Città (Provincia)" />
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(messaggioErrore))
+            {
+                <div class="alert alert-danger mt-3 mb-0 py-2"><i class="bi bi-exclamation-triangle-fill"></i> @messaggioErrore</div>
+            }
+
+            <div class="mt-4">
+                <button class="btn btn-success" @onclick="SalvaAssociato"><i class="bi bi-save"></i> Salva nel Database</button>
+                <button class="btn btn-outline-secondary ms-2" @onclick="ChiudiForm">Annulla</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (associati == null)
+{
+    <p class="text-muted"><i class="spinner-border spinner-border-sm"></i> Caricamento rubrica...</p>
+}
+else if (associati.Count == 0)
+{
+    <div class="alert alert-info border-0 shadow-sm">Nessun associato registrato. Aggiungi il primo membro!</div>
+}
+else
+{
+    <div class="card shadow-sm border-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle m-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Tessera</th>
+                        <th>Cognome e Nome</th>
+                        <th>Contatti</th>
+                        <th>Città / Indirizzo</th>
+                        <th class="text-center">Azioni</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (AssociatiFiltrati != null && !AssociatiFiltrati.Any())
+                    {
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-muted fst-italic">Nessun associato trovato con questo nome.</td>
+                        </tr>
+                    }
+                    else if (AssociatiFiltrati != null)
+                    {
+                        @foreach (var socio in AssociatiFiltrati.OrderBy(a => a.Cognome))
+                        {
+                            <tr>
+                                <td>
+                                    @if (string.IsNullOrWhiteSpace(socio.NumeroTessera))
+                                    {
+                                        <span class="text-muted fst-italic">Non assegnata</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">@socio.NumeroTessera</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="fw-bold">@socio.Cognome @socio.Nome</div>
+                                    @if (socio.DataDiNascita.HasValue)
+                                    {
+                                        <small class="text-muted">Nato/a il: @socio.DataDiNascita.Value.ToString("dd/MM/yyyy")</small>
+                                    }
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(socio.Cellulare))
+                                    {
+                                        <div><i class="bi bi-telephone text-secondary"></i> @socio.Cellulare</div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(socio.Email))
+                                    {
+                                        <div><i class="bi bi-envelope text-secondary"></i> <a href="mailto:@socio.Email" class="text-decoration-none">@socio.Email</a></div>
+                                    }
+                                    @if (string.IsNullOrWhiteSpace(socio.Cellulare) && string.IsNullOrWhiteSpace(socio.Email))
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(socio.Indirizzo))
+                                    {
+                                        <span>@socio.Indirizzo</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                                <td class="text-center text-nowrap">
+                                    <Button Color="ButtonColor.Success" Size="ButtonSize.Small" Class="me-1" @onclick="() => ApriModaleProgetti(socio)" title="Vedi progetti collegati">
+                                        <Icon Name="IconName.ClipboardCheck" />
+                                    </Button>
+                                    <Button Color="ButtonColor.Primary" Size="ButtonSize.Small" Class="me-1" @onclick="() => ApriFormModifica(socio)" title="Modifica associato">
+                                        <Icon Name="IconName.PencilSquare" />
+                                    </Button>
+                                    <Button Color="ButtonColor.Danger" Size="ButtonSize.Small" @onclick="() => ApriModaleEliminazione(socio)" title="Elimina associato">
+                                        <Icon Name="IconName.Trash3" />
+                                    </Button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<ConfirmDialog @ref="dialog" />
+
+@if (mostraModaleProgetti && socioPerProgetti != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6);" @onclick="ChiudiModaleProgetti">
+        <div class="modal-dialog modal-dialog-centered modal-lg" @onclick:stopPropagation="true">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-success text-white border-0">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-clipboard-check me-2"></i>Progetti di @socioPerProgetti.Nome @socioPerProgetti.Cognome</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="ChiudiModaleProgetti"></button>
+                </div>
+                <div class="modal-body p-4 bg-light">
+                    @if (progettiDelSocio == null)
+                    {
+                        <div class="text-center text-muted my-3">
+                            <div class="spinner-border spinner-border-sm mb-2"></div><br />
+                            Ricerca progetti in corso...
+                        </div>
+                    }
+                    else if (!progettiDelSocio.Any())
+                    {
+                        <div class="alert alert-white border shadow-sm text-center text-muted m-0">
+                            Nessun progetto associato a questo membro.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="list-group shadow-sm">
+                            @foreach (var p in progettiDelSocio.OrderByDescending(x => x.Id))
+                            {
+                                <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-3" @onclick="() => VaiAlProgetto(p.Id)">
+                                    <div>
+                                        <div class="fw-bold text-primary fs-6">@p.Titolo</div>
+                                        <div class="text-muted small mt-1">Valore: <span class="fw-semibold">@p.PrezzoTotale.ToString("C")</span></div>
+                                    </div>
+                                    <div class="text-end">
+                                        @if (p.IsConsegnato)
+                                        {
+                                            <span class="badge bg-success rounded-pill px-3 py-2">Consegnato</span>
+                                        }
+                                        else if (p.IsCompletato)
+                                        {
+                                            <span class="badge bg-info text-dark rounded-pill px-3 py-2">Da Consegnare</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-warning text-dark rounded-pill px-3 py-2">In Corso</span>
+                                        }
+                                        <i class="bi bi-chevron-right ms-3 text-muted"></i>
+                                    </div>
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary px-4" @onclick="ChiudiModaleProgetti">Chiudi</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Associato>? associati;
+    private Associato associatoCorrente = new();
+    
+    private bool mostraForm = false;
+    private string messaggioErrore = "";
+
+    // Ricerca Associati
+    private string testoRicerca = "";
+
+    private IEnumerable<Associato>? AssociatiFiltrati =>
+        string.IsNullOrWhiteSpace(testoRicerca)
+            ? associati
+            : associati?.Where(a =>
+                a.Nome.Contains(testoRicerca, StringComparison.OrdinalIgnoreCase) ||
+                a.Cognome.Contains(testoRicerca, StringComparison.OrdinalIgnoreCase));
+
+    private ConfirmDialog dialog = default!;
+
+    // Variabili per il Modale Progetti
+    private bool mostraModaleProgetti = false;
+    private Associato? socioPerProgetti;
+    private List<Progetto>? progettiDelSocio;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CaricaDati();
+    }
+
+    private async Task CaricaDati()
+    {
+        associati = await AssociatiService.GetAssociatiAsync();
+    }
+
+    private void ApriFormNuovo()
+    {
+        associatoCorrente = new Associato();
+        messaggioErrore = "";
+        mostraForm = true;
+    }
+
+    private void ApriFormModifica(Associato socioEsistente)
+    {
+        associatoCorrente = new Associato
+        {
+            Id = socioEsistente.Id,
+            NumeroTessera = socioEsistente.NumeroTessera,
+            Nome = socioEsistente.Nome,
+            Cognome = socioEsistente.Cognome,
+            DataDiNascita = socioEsistente.DataDiNascita,
+            Indirizzo = socioEsistente.Indirizzo,
+            Cellulare = socioEsistente.Cellulare,
+            Email = socioEsistente.Email
+        };
+        
+        messaggioErrore = "";
+        mostraForm = true;
+    }
+
+    private void ChiudiForm()
+    {
+        mostraForm = false;
+    }
+
+    private async Task SalvaAssociato()
+    {
+        messaggioErrore = "";
+
+        if (string.IsNullOrWhiteSpace(associatoCorrente.Nome) || string.IsNullOrWhiteSpace(associatoCorrente.Cognome))
+        {
+            messaggioErrore = "Nome e Cognome sono campi obbligatori.";
+            return;
+        }
+
+        if (associatoCorrente.Id == 0)
+        {
+            await AssociatiService.AggiungiAssociatoAsync(associatoCorrente);
+            ToastService.Notify(new ToastMessage(ToastType.Success, "Nuovo Membro", $"Associato {associatoCorrente.Nome} aggiunto con successo!"));
+        }
+        else
+        {
+            await AssociatiService.AggiornaAssociatoAsync(associatoCorrente);
+            ToastService.Notify(new ToastMessage(ToastType.Info, "Dati Aggiornati", $"La scheda di {associatoCorrente.Nome} è stata modificata."));
+        }
+        
+        mostraForm = false;
+        await CaricaDati();
+    }
+    
+    private async Task ApriModaleEliminazione(Associato socio)
+    {
+        var options = new ConfirmDialogOptions
+        {
+            YesButtonText = "Sì, Elimina",
+            YesButtonColor = ButtonColor.Danger,
+            NoButtonText = "Annulla",
+            NoButtonColor = ButtonColor.Secondary
+        };
+
+        var conferma = await dialog.ShowAsync(
+            title: "Conferma Eliminazione",
+            message1: $"Sei sicuro di voler eliminare l'associato {socio.Nome} {socio.Cognome}?",
+            message2: "Questa operazione è irreversibile.",
+            confirmDialogOptions: options);
+
+        if (conferma)
+        {
+            await AssociatiService.EliminaAssociatoAsync(socio.Id);
+            ToastService.Notify(new ToastMessage(ToastType.Danger, "Eliminato", "L'associato è stato rimosso definitivamente."));
+            await CaricaDati();
+        }
+    }
+
+    // --- LOGICA MODALE PROGETTI ---
+
+    private async Task ApriModaleProgetti(Associato socio)
+    {
+        socioPerProgetti = socio;
+        mostraModaleProgetti = true;
+        progettiDelSocio = null; // Svuota la lista per mostrare il caricamento
+
+        // Peschiamo tutti i progetti e filtriamo quelli in cui questo associato è presente nei Membri
+        var tuttiProgetti = await ProgettiService.GetProgettiAsync();
+        progettiDelSocio = tuttiProgetti.Where(p => p.Membri != null && p.Membri.Any(m => m.Id == socio.Id)).ToList();
+    }
+
+    private void ChiudiModaleProgetti()
+    {
+        mostraModaleProgetti = false;
+        socioPerProgetti = null;
+        progettiDelSocio = null;
+    }
+
+    private void VaiAlProgetto(int progettoId)
+    {
+        NavManager.NavigateTo($"/progetto/{progettoId}");
+    }
+}

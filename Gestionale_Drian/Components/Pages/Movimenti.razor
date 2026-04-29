@@ -1,0 +1,218 @@
+﻿@page "/movimenti"
+@using Gestionale_Drian.Data
+@using Gestionale_Drian.Services
+@using BlazorBootstrap
+@inject MovimentiService MovimentiService
+@inject ArticoliService ArticoliService
+@inject ToastService ToastService
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="m-0 text-primary fw-bold"><i class="bi bi-arrow-left-right me-2"></i> Registro Movimenti Materiali</h3>
+    @if (!mostraForm)
+    {
+        <Button Color="ButtonColor.Primary" Class="shadow-sm" @onclick="ApriForm">
+            <Icon Name="IconName.PlusLg" /> Registra Operazione
+        </Button>
+    }
+</div>
+
+@if (mostraForm)
+{
+    <div class="card border-primary mb-4 shadow-sm">
+        <div class="card-header bg-primary text-white fw-bold">
+            Nuova Operazione Stock
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label text-secondary fw-bold">Tipo Operazione</label>
+                    <select class="form-select" @bind="movimentoCorrente.TipoOperazione">
+                        <option value="Carico">📈 Carico (Nuovo Acquisto)</option>
+                        <option value="Scarico">📉 Scarico (Da Magazzino Intero)</option>
+                        <option value="MessaInUso">✂️ Messa in Uso (Apertura Materiale)</option>
+                        <option value="ScaricoUso">🗑️ Scarico (Consumo Materiale Aperto)</option>
+                    </select>
+
+                    <label class="form-label text-secondary fw-bold mt-3">Quantità *</label>
+                    <input type="number" min="1" class="form-control" @bind="quantitaInserita" placeholder="Es. 1" />
+
+                    <label class="form-label text-secondary fw-bold mt-3">Data Operazione</label>
+                    <input type="date" class="form-control" @bind="movimentoCorrente.Data" />
+                </div>
+                
+                <div class="col-md-8 border-start">
+                    <label class="form-label text-secondary fw-bold">Cerca e Seleziona Articolo *</label>
+                    
+                    <div class="input-group mb-2">
+                        <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" placeholder="Cerca materiale..." @bind="testoRicercaArticolo" @bind:event="oninput" />
+                    </div>
+
+                    <select class="form-select" @bind="movimentoCorrente.ArticoloId" size="5">
+                        @if (ArticoliFiltrati != null && ArticoliFiltrati.Any())
+                        {
+                            @foreach (var art in ArticoliFiltrati)
+                            {
+                                <option value="@art.Id">
+                                    @art.Nome (Interi: @art.QuantitaInMagazzino | In Uso: @art.QuantitaInUso)
+                                </option>
+                            }
+                        }
+                    </select>
+
+                    <label class="form-label text-secondary fw-bold mt-3">Causale / Progetto</label>
+                    <input type="text" class="form-control" @bind="movimentoCorrente.Causale" placeholder="Es. Nome Progetto, Manutenzione..." />
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(messaggioErrore))
+            {
+                <div class="alert alert-danger mt-3 mb-0 py-2"><Icon Name="IconName.ExclamationTriangleFill" /> @messaggioErrore</div>
+            }
+
+            <div class="mt-4 border-top pt-3 d-flex justify-content-end">
+                <button class="btn btn-outline-secondary me-2" @onclick="ChiudiForm">Annulla</button>
+                <button class="btn btn-success fw-bold px-4" @onclick="SalvaMovimento"><i class="bi bi-save"></i> Conferma</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (movimenti == null)
+{
+    <p class="text-muted"><i class="spinner-border spinner-border-sm"></i> Caricamento...</p>
+}
+else
+{
+    <div class="card shadow-sm border-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle m-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Data</th>
+                        <th>Articolo</th>
+                        <th>Tipo Azione</th>
+                        <th>Quantità</th>
+                        <th>Causale</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var mov in movimenti.OrderByDescending(m => m.Data).ThenByDescending(m => m.Id))
+                    {
+                        <tr>
+                            <td class="small text-muted">@mov.Data.ToString("dd/MM/yyyy")</td>
+                            <td class="fw-bold">@(mov.Articolo?.Nome ?? "N/D")</td>
+                            <td>
+                                @switch (mov.TipoOperazione)
+                                {
+                                    case "Carico":
+                                        <span class="badge bg-success-subtle text-success border border-success">CARICO</span>
+                                        break;
+                                    case "Scarico":
+
+                                        <span class="badge bg-danger-subtle text-danger border border-danger">SCARICO STOCK</span>
+                                        break;
+                                    case "MessaInUso":
+
+                                        <span class="badge bg-warning-subtle text-warning border border-warning text-dark">APERTO / IN USO</span>
+                                        break;
+                                    case "ScaricoUso":
+
+                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary">CONSUMO USATO</span>
+                                        break;
+                                }
+                            </td>
+                            <td class="fw-bold">@mov.Quantita</td>
+                            <td class="text-muted small">@mov.Causale</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Movimento>? movimenti;
+    private List<Articolo>? articoliDisponibili;
+    private bool mostraForm = false;
+    private Movimento movimentoCorrente = new Movimento { Data = DateTime.Now, TipoOperazione = "Scarico" };
+    private int quantitaInserita = 1;
+    private string messaggioErrore = "";
+    private string testoRicercaArticolo = "";
+
+    private IEnumerable<Articolo>? ArticoliFiltrati =>
+        string.IsNullOrWhiteSpace(testoRicercaArticolo)
+            ? articoliDisponibili
+            : articoliDisponibili?.Where(a => a.Nome.Contains(testoRicercaArticolo, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CaricaDati();
+    }
+
+    private async Task CaricaDati()
+    {
+        movimenti = await MovimentiService.GetMovimentiAsync();
+        articoliDisponibili = await ArticoliService.GetArticoliAsync();
+    }
+
+    private void ApriForm()
+    {
+        movimentoCorrente = new Movimento { Data = DateTime.Now, ArticoloId = 0, TipoOperazione = "Scarico" };
+        quantitaInserita = 1;
+        testoRicercaArticolo = "";
+        messaggioErrore = "";
+        mostraForm = true;
+    }
+
+    private void ChiudiForm() { mostraForm = false; }
+
+    private async Task SalvaMovimento()
+    {
+        messaggioErrore = "";
+        if (movimentoCorrente.ArticoloId == 0) { messaggioErrore = "Seleziona un materiale."; return; }
+        
+        var art = articoliDisponibili?.FirstOrDefault(a => a.Id == movimentoCorrente.ArticoloId);
+        if (art == null) return;
+
+        // Validazione scorte in base all'operazione
+        if (movimentoCorrente.TipoOperazione == "Scarico" && art.QuantitaInMagazzino < quantitaInserita) { messaggioErrore = "Stock insufficiente."; return; }
+        if (movimentoCorrente.TipoOperazione == "MessaInUso" && art.QuantitaInMagazzino < quantitaInserita) { messaggioErrore = "Non ci sono abbastanza pezzi interi da aprire."; return; }
+        if (movimentoCorrente.TipoOperazione == "ScaricoUso" && art.QuantitaInUso < quantitaInserita) { messaggioErrore = "Quantità in uso insufficiente."; return; }
+
+        movimentoCorrente.Quantita = quantitaInserita;
+        await MovimentiService.AggiungiMovimentoAsync(movimentoCorrente);
+
+        // NOTIFICHE TOAST AGGIORNATE
+        InviaNotificaToast(art, movimentoCorrente.TipoOperazione);
+
+        mostraForm = false;
+        await CaricaDati();
+    }
+
+    private void InviaNotificaToast(Articolo art, string operazione)
+    {
+        switch (operazione)
+        {
+            case "Carico":
+                ToastService.Notify(new ToastMessage(ToastType.Success, "Magazzino Aggiornato", $"Caricati {quantitaInserita} pezzi di {art.Nome}."));
+                break;
+            case "MessaInUso":
+                ToastService.Notify(new ToastMessage(ToastType.Warning, "Materiale Aperto", $"{quantitaInserita} pezzi di {art.Nome} spostati 'In Uso'."));
+                break;
+            case "Scarico":
+                if (art.QuantitaInMagazzino - quantitaInserita <= 0)
+                    ToastService.Notify(new ToastMessage(ToastType.Danger, "STOCK ESAURITO", $"I pezzi integri di {art.Nome} sono finiti!"));
+                else
+                    ToastService.Notify(new ToastMessage(ToastType.Info, "Scarico Stock", $"Prelevati {quantitaInserita} pezzi integri di {art.Nome}."));
+                break;
+            case "ScaricoUso":
+                if (art.QuantitaInUso - quantitaInserita <= 0)
+                    ToastService.Notify(new ToastMessage(ToastType.Danger, "MATERIALE FINITO", $"I ritagli/pezzi aperti di {art.Nome} sono terminati!"));
+                else
+                    ToastService.Notify(new ToastMessage(ToastType.Secondary, "Consumo materiale", $"Usati ritagli di {art.Nome}."));
+                break;
+        }
+    }
+}

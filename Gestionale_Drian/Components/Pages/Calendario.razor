@@ -1,0 +1,261 @@
+﻿@page "/calendario"
+@using Gestionale_Drian.Data
+@using Gestionale_Drian.Services
+@using BlazorBootstrap
+@inject ProgettiService ProgettiService
+@inject EventiService EventiService
+@inject ToastService ToastService
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="m-0 text-primary fw-bold"><i class="bi bi-calendar-month me-2"></i> Calendario Impegni</h3>
+    
+    <div class="d-flex align-items-center gap-3">
+        <button class="btn btn-outline-primary shadow-sm" @onclick="MesePrecedente"><i class="bi bi-chevron-left"></i></button>
+        <h5 class="m-0 fw-bold text-uppercase" style="min-width: 150px; text-align: center;">
+            @meseCorrente.ToString("MMMM yyyy")
+        </h5>
+        <button class="btn btn-outline-primary shadow-sm" @onclick="MeseSuccessivo"><i class="bi bi-chevron-right"></i></button>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-3">
+                <div class="calendar-header mb-2">
+                    <div>Lun</div><div>Mar</div><div>Mer</div><div>Gio</div><div>Ven</div><div>Sab</div><div>Dom</div>
+                </div>
+                
+                <div class="calendar-grid">
+                    @for (int i = 0; i < offsetGiorni; i++)
+                    {
+                        <div class="calendar-cell empty"></div>
+                    }
+
+                    @for (int d = 1; d <= giorniNelMese; d++)
+                    {
+                        int giornoAttuale = d;
+                        DateTime dataCella = new DateTime(meseCorrente.Year, meseCorrente.Month, giornoAttuale);
+                        bool isOggi = dataCella == DateTime.Today;
+                        bool isSelezionato = dataCella == giornoSelezionato;
+
+                        <div class="calendar-cell @(isOggi ? "today" : "") @(isSelezionato ? "selected" : "")" @onclick="() => SelezionaGiorno(dataCella)">
+                            <div class="day-number">@giornoAttuale</div>
+                            
+                            <div class="events-container mt-1">
+                                @foreach(var p in progettiMese.Where(x => !x.IsConsegnato && x.DataScadenza.Date == dataCella))
+                                {
+                                    <div class="event-badge bg-warning text-dark"><i class="bi bi-exclamation-circle"></i> @p.Titolo</div>
+                                }
+                                
+                                @foreach(var p in progettiMese.Where(x => x.IsConsegnato && x.DataConsegna.HasValue && x.DataConsegna.Value.Date == dataCella))
+                                {
+                                    <div class="event-badge bg-success"><i class="bi bi-check2"></i> @p.Titolo</div>
+                                }
+
+                                @foreach(var evt in eventiCustomMese.Where(x => x.Data.Date == dataCella))
+                                {
+                                    <div class="event-badge bg-@evt.ColoreTag">@evt.Titolo</div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-primary text-white pt-3 pb-2 border-0">
+                <h6 class="fw-bold mb-0"><i class="bi bi-list-task"></i> Dettaglio: @giornoSelezionato.ToString("dd/MM/yyyy")</h6>
+            </div>
+            <div class="card-body">
+                
+                <div class="mb-4">
+                    @{
+                        var scadenzeGiorno = progettiMese.Where(x => !x.IsConsegnato && x.DataScadenza.Date == giornoSelezionato).ToList();
+                        var consegneGiorno = progettiMese.Where(x => x.IsConsegnato && x.DataConsegna?.Date == giornoSelezionato).ToList();
+                        var customGiorno = eventiCustomMese.Where(x => x.Data.Date == giornoSelezionato).ToList();
+                    }
+
+                    @if(!scadenzeGiorno.Any() && !consegneGiorno.Any() && !customGiorno.Any())
+                    {
+                        <div class="text-muted small italic">Nessun evento in questa data.</div>
+                    }
+
+                    <ul class="list-group list-group-flush">
+                        @foreach(var p in scadenzeGiorno)
+                        {
+                            <li class="list-group-item px-0 py-2 border-0">
+                                <span class="badge bg-warning text-dark me-2">Scadenza</span> @p.Titolo
+                            </li>
+                        }
+                        @foreach(var p in consegneGiorno)
+                        {
+                            <li class="list-group-item px-0 py-2 border-0">
+                                <span class="badge bg-success me-2">Consegnato</span> @p.Titolo
+                            </li>
+                        }
+                        @foreach(var evt in customGiorno)
+                        {
+                            <li class="list-group-item px-0 py-2 border-0 d-flex justify-content-between align-items-center">
+                                <div><span class="badge bg-@evt.ColoreTag me-2">Impegno</span> @evt.Titolo</div>
+                                <button class="btn btn-sm text-danger p-0" @onclick="() => EliminaEvento(evt.Id)"><i class="bi bi-trash3"></i></button>
+                            </li>
+                        }
+                    </ul>
+                </div>
+
+                <hr class="text-muted" />
+
+                <h6 class="fw-bold text-secondary small mb-3">AGGIUNGI NUOVO IMPEGNO</h6>
+                <div class="mb-2">
+                    <input type="text" class="form-control form-control-sm" placeholder="Titolo impegno..." @bind="nuovoEvento.Titolo" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small text-muted">Colore Tag:</label>
+                    <select class="form-select form-select-sm" @bind="nuovoEvento.ColoreTag">
+                        <option value="primary">Blu (Generico)</option>
+                        <option value="danger">Rosso (Urgente)</option>
+                        <option value="purple">Viola (Personale)</option>
+                        <option value="info">Azzurro (Incontro)</option>
+                        <option value="secondary">Grigio (Eventi)</option>
+                        <option value="dark">Nero (Varie)</option>
+                    </select>
+                </div>
+                <button class="btn btn-sm btn-primary w-100" @onclick="SalvaEvento"><i class="bi bi-plus-lg"></i> Salva in questa data</button>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .calendar-header {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        text-align: center;
+        font-weight: bold;
+        color: #6c757d;
+        border-bottom: 2px solid #dee2e6;
+        padding-bottom: 0.5rem;
+    }
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+        margin-top: 10px;
+    }
+    .calendar-cell {
+        min-height: 100px;
+        border: 1px solid #e9ecef;
+        border-radius: 6px;
+        padding: 5px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        display: flex;
+        flex-direction: column;
+    }
+    .calendar-cell:hover { background-color: #f8f9fa; }
+    .calendar-cell.empty { background-color: #f8f9fa; border: 1px dashed #dee2e6; cursor: default; }
+    .calendar-cell.today { border: 2px solid #0d6efd; background-color: #f0f8ff; }
+    .calendar-cell.selected { border: 2px solid #0dcaf0; background-color: #e0f8f8; }
+    .day-number { font-weight: bold; color: #495057; text-align: right; font-size: 0.9rem; }
+    
+    .events-container { flex-grow: 1; overflow-y: auto; }
+    .event-badge {
+        font-size: 0.65rem;
+        padding: 2px 4px;
+        border-radius: 4px;
+        margin-bottom: 3px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: white;
+    }
+    .bg-purple { background-color: #6f42c1; }
+</style>
+
+@code {
+    private DateTime meseCorrente = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime giornoSelezionato = DateTime.Today;
+
+    // Variabili per il layout della griglia
+    private int offsetGiorni;
+    private int giorniNelMese;
+
+    private List<Progetto> progettiMese = new();
+    private List<EventoCalendario> eventiCustomMese = new();
+
+    private EventoCalendario nuovoEvento = new EventoCalendario { ColoreTag = "primary" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CaricaDatiMese();
+    }
+
+    private async Task CaricaDatiMese()
+    {
+        giorniNelMese = DateTime.DaysInMonth(meseCorrente.Year, meseCorrente.Month);
+        int dayOfWeek = (int)meseCorrente.DayOfWeek;
+        offsetGiorni = dayOfWeek == 0 ? 6 : dayOfWeek - 1; // Adatta per far partire la settimana di Lunedì
+
+        // Peschiamo i progetti e gli eventi di questo mese
+        var tuttiProgetti = await ProgettiService.GetProgettiAsync();
+        progettiMese = tuttiProgetti.Where(p => 
+            (p.DataScadenza.Month == meseCorrente.Month && p.DataScadenza.Year == meseCorrente.Year) ||
+            (p.DataConsegna.HasValue && p.DataConsegna.Value.Month == meseCorrente.Month && p.DataConsegna.Value.Year == meseCorrente.Year)
+        ).ToList();
+
+        eventiCustomMese = await EventiService.GetEventiMeseAsync(meseCorrente.Year, meseCorrente.Month);
+    }
+
+    private async Task MesePrecedente()
+    {
+        meseCorrente = meseCorrente.AddMonths(-1);
+        await CaricaDatiMese();
+    }
+
+    private async Task MeseSuccessivo()
+    {
+        meseCorrente = meseCorrente.AddMonths(1);
+        await CaricaDatiMese();
+    }
+
+    private void SelezionaGiorno(DateTime data)
+    {
+        giornoSelezionato = data;
+        nuovoEvento = new EventoCalendario { ColoreTag = "primary" }; // Resetta il form
+    }
+
+    private async Task SalvaEvento()
+    {
+        if (!string.IsNullOrWhiteSpace(nuovoEvento.Titolo))
+        {
+            nuovoEvento.Data = giornoSelezionato;
+            await EventiService.AggiungiEventoAsync(nuovoEvento);
+            
+            // TOAST VERDE DI SUCCESSO
+            ToastService.Notify(new ToastMessage(ToastType.Success, "Impegno Salvato", $"L'evento '{nuovoEvento.Titolo}' è stato aggiunto al calendario."));
+
+            nuovoEvento = new EventoCalendario { ColoreTag = "primary" }; // Reset
+            await CaricaDatiMese();
+        }
+        else
+        {
+            // TOAST GIALLO DI AVVISO se il titolo è vuoto
+            ToastService.Notify(new ToastMessage(ToastType.Warning, "Attenzione", "Inserisci un titolo per l'impegno."));
+        }
+    }
+
+    private async Task EliminaEvento(int id)
+    {
+        await EventiService.EliminaEventoAsync(id);
+        
+        // TOAST ROSSO DI ELIMINAZIONE
+        ToastService.Notify(new ToastMessage(ToastType.Danger, "Impegno Eliminato", "L'evento è stato rimosso dal calendario."));
+        
+        await CaricaDatiMese();
+    }
+}

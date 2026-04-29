@@ -1,0 +1,79 @@
+﻿@page "/profilo"
+@using Microsoft.Maui.Storage
+@using BlazorBootstrap
+@inject NavigationManager NavManager
+@inject ToastService ToastService
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex align-items-center">
+        <button class="btn btn-outline-secondary me-3 shadow-sm" @onclick='() => NavManager.NavigateTo("/")'><i class="bi bi-arrow-left"></i> Indietro</button>
+        <h3 class="m-0 text-primary fw-bold"><i class="bi bi-person-badge me-2"></i> Profilo e Info</h3>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white pt-3 pb-0 border-0">
+                <h5 class="fw-bold text-secondary"><i class="bi bi-gear text-secondary me-2"></i> Impostazioni Account</h5>
+            </div>
+            <div class="card-body">
+                <label class="form-label text-secondary fw-bold">Nome Visualizzato (in alto a destra)</label>
+                <div class="input-group mb-4 shadow-sm">
+                    <span class="input-group-text bg-primary text-white border-primary"><i class="bi bi-person"></i></span>
+                    <input type="text" class="form-control border-primary" @bind="nuovoNome" placeholder="Es. Mario, Peach, Admin..." />
+                </div>
+                
+                <button class="btn btn-success shadow-sm w-100 fw-bold" @onclick="SalvaNome"><i class="bi bi-save me-2"></i> Salva Cambiamenti</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100 bg-light text-center p-4" style="background: linear-gradient(145deg, #f8f9fa 0%, #e9ecef 100%);">
+            <div class="card-body d-flex flex-column justify-content-center align-items-center">
+                <div class="mb-3">
+                    <i class="bi bi-stars text-warning" style="font-size: 3rem;"></i>
+                    <i class="bi bi-rocket-takeoff-fill text-primary mx-2" style="font-size: 3.5rem;"></i>
+                    <i class="bi bi-stars text-warning" style="font-size: 3rem;"></i>
+                </div>
+                
+                <h3 class="fw-bold mt-2 text-primary">Gestionale Associazione</h3>
+                <p class="text-muted mb-4 fw-semibold">Versione 1.0</p>
+                
+                <div class="alert alert-white border shadow-sm w-100 p-4 rounded-4 bg-white">
+                    <p class="m-0 text-secondary">
+                        Sviluppato con passione, un po' di magia,<br />tanto debugging e tonnellate di codice da:<br />
+                        <br />
+                        <span class="text-primary fw-bold" style="font-size: 1.3rem;">Gianluca Taraschi</span>
+                    </p>
+                </div>
+                <p class="small text-muted mt-3 fst-italic">Gestionale per piccole associazioni gratuito</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string nuovoNome = "";
+
+    protected override void OnInitialized()
+    {
+        nuovoNome = Preferences.Default.Get("NomeUtente", "");
+    }
+
+    private void SalvaNome()
+    {
+        if (!string.IsNullOrWhiteSpace(nuovoNome))
+        {
+            Preferences.Default.Set("NomeUtente", nuovoNome);
+            
+            // Forza il ricaricamento dell'intera app per far aggiornare subito la scritta nel MainLayout
+            NavManager.NavigateTo("/profilo", forceLoad: true);
+        }
+        else
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Danger, "Errore", "Il nome non può essere vuoto."));
+        }
+    }
+}

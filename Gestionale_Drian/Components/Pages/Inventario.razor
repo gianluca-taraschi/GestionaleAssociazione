@@ -1,0 +1,186 @@
+﻿@page "/inventario"
+@using Gestionale_Drian.Data
+@using Gestionale_Drian.Services
+@using BlazorBootstrap
+@inject ArticoliService ArticoliService
+@inject ToastService ToastService
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="m-0 text-primary fw-bold"><i class="bi bi-box-seam-fill me-2"></i> Inventario e Stock</h3>
+    
+    <div class="d-flex gap-2">
+        <div class="input-group w-auto shadow-sm">
+            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+            <input type="text" class="form-control" placeholder="Cerca materiale..." @bind="testoRicerca" @bind:event="oninput" style="max-width: 250px;" />
+        </div>
+        
+        @if (!mostraForm)
+        {
+            <Button Color="ButtonColor.Primary" Class="shadow-sm" @onclick="ApriFormNuovo">
+                <Icon Name="IconName.PlusLg" /> Nuovo Articolo
+            </Button>
+        }
+    </div>
+</div>
+
+@if (mostraForm)
+{
+    <div class="card border-primary mb-4 shadow-sm">
+        <div class="card-header bg-primary text-white fw-bold">
+            @(articoloCorrente.Id == 0 ? "Nuova Anagrafica Materiale" : $"Modifica {articoloCorrente.Nome}")
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label text-secondary fw-bold">Nome Materiale *</label>
+                    <input type="text" class="form-control" @bind="articoloCorrente.Nome" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label text-secondary fw-bold">Categoria</label>
+                    <input type="text" class="form-control" @bind="articoloCorrente.Categoria" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label text-secondary fw-bold">Prezzo Acquisto (€)</label>
+                    <input type="number" step="0.01" class="form-control" @bind="articoloCorrente.Prezzo" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label text-secondary fw-bold">Stock Intero (Magazzino)</label>
+                    <input type="number" class="form-control" @bind="articoloCorrente.QuantitaInMagazzino" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label text-secondary fw-bold">In Uso (Aperto)</label>
+                    <input type="number" class="form-control" @bind="articoloCorrente.QuantitaInUso" />
+                </div>
+            </div>
+            <div class="mt-4">
+                <button class="btn btn-success" @onclick="SalvaArticolo"><i class="bi bi-save"></i> Salva</button>
+                <button class="btn btn-outline-secondary ms-2" @onclick="ChiudiForm">Annulla</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (articoli == null)
+{
+    <p class="text-muted"><i class="spinner-border spinner-border-sm"></i> Caricamento in corso...</p>
+}
+else
+{
+    <div class="card shadow-sm border-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle m-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Materiale</th>
+                        <th>Categoria</th>
+                        <th>Costo</th>
+                        <th>Stock Intero</th>
+                        <th>In Uso (Aperto)</th>
+                        <th class="text-center">Azioni</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (ArticoliFiltrati != null && !ArticoliFiltrati.Any())
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted fst-italic">Nessun materiale trovato.</td>
+                        </tr>
+                    }
+                    else if (ArticoliFiltrati != null)
+                    {
+                        @foreach (var art in ArticoliFiltrati.OrderBy(a => a.Nome))
+                        {
+                            <tr>
+                                <td><div class="fw-bold text-primary">@art.Nome</div></td>
+                                <td><span class="badge bg-secondary">@art.Categoria</span></td>
+                                <td>@art.Prezzo.ToString("C")</td>
+                                <td>
+                                    <span class="badge @(art.QuantitaInMagazzino <= 2 ? "bg-danger" : "bg-success") rounded-pill px-3">@art.QuantitaInMagazzino</span>
+                                </td>
+                                <td>
+                                    <span class="badge @(art.QuantitaInUso == 0 ? "bg-light text-muted border" : "bg-warning text-dark") rounded-pill px-3">@art.QuantitaInUso</span>
+                                </td>
+                                <td class="text-center">
+                                    <Button Color="ButtonColor.Primary" Size="ButtonSize.Small" Class="me-1" @onclick="() => ApriFormModifica(art)"><Icon Name="IconName.PencilSquare" /></Button>
+                                    <Button Color="ButtonColor.Danger" Size="ButtonSize.Small" @onclick="() => ApriModaleEliminazione(art)"><Icon Name="IconName.Trash3" /></Button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<ConfirmDialog @ref="dialog" />
+
+@code {
+    private List<Articolo>? articoli;
+    private bool mostraForm = false;
+    private Articolo articoloCorrente = new();
+    private ConfirmDialog dialog = default!;
+
+    // Variabile per la barra di ricerca
+    private string testoRicerca = "";
+
+    // Logica di filtraggio in tempo reale (cerca per nome o categoria)
+    private IEnumerable<Articolo>? ArticoliFiltrati =>
+        string.IsNullOrWhiteSpace(testoRicerca)
+            ? articoli
+            : articoli?.Where(a =>
+                a.Nome.Contains(testoRicerca, StringComparison.OrdinalIgnoreCase) ||
+                (!string.IsNullOrWhiteSpace(a.Categoria) && a.Categoria.Contains(testoRicerca, StringComparison.OrdinalIgnoreCase)));
+
+    protected override async Task OnInitializedAsync() { await CaricaDati(); }
+    
+    private async Task CaricaDati() { articoli = await ArticoliService.GetArticoliAsync(); }
+    
+    private void ApriFormNuovo() { articoloCorrente = new(); mostraForm = true; }
+    
+    private void ApriFormModifica(Articolo art)
+    {
+        articoloCorrente = new Articolo
+        {
+            Id = art.Id,
+            Nome = art.Nome,
+            Categoria = art.Categoria,
+            Prezzo = art.Prezzo,
+            QuantitaInMagazzino = art.QuantitaInMagazzino,
+            QuantitaInUso = art.QuantitaInUso
+        };
+        mostraForm = true;
+    }
+    
+    private void ChiudiForm() { mostraForm = false; }
+
+    private async Task SalvaArticolo()
+    {
+        if (string.IsNullOrWhiteSpace(articoloCorrente.Nome)) return;
+        
+        if (articoloCorrente.Id == 0)
+        {
+            await ArticoliService.AggiungiArticoloAsync(articoloCorrente);
+            ToastService.Notify(new ToastMessage(ToastType.Success, "Magazzino", "Nuovo materiale inserito."));
+        }
+        else
+        {
+            await ArticoliService.AggiornaArticoloAsync(articoloCorrente);
+            ToastService.Notify(new ToastMessage(ToastType.Info, "Magazzino", "Anagrafica aggiornata."));
+        }
+        
+        mostraForm = false;
+        await CaricaDati();
+    }
+
+    private async Task ApriModaleEliminazione(Articolo art)
+    {
+        var conferma = await dialog.ShowAsync(title: "Elimina Materiale", message1: $"Vuoi rimuovere {art.Nome}?");
+        if (conferma)
+        {
+            await ArticoliService.EliminaArticoloAsync(art.Id);
+            ToastService.Notify(new ToastMessage(ToastType.Danger, "Eliminato", "Materiale rimosso dal database."));
+            await CaricaDati();
+        }
+    }
+}

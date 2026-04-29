@@ -1,0 +1,123 @@
+﻿@page "/impostazioni-fiera"
+@using Microsoft.Maui.Storage
+@using BlazorBootstrap
+@inject NavigationManager NavManager
+@inject ToastService ToastService
+
+<div class="d-flex align-items-center mb-4">
+    <button class="btn btn-outline-secondary me-3 shadow-sm" @onclick="TornaAllaDashboard">
+        <i class="bi bi-arrow-left"></i> Dashboard
+    </button>
+    <h3 class="m-0 text-primary fw-bold"><i class="bi bi-calendar-star me-2"></i> Imposta Prossimo Evento</h3>
+</div>
+
+<div class="card shadow-sm border-0" style="max-width: 600px;">
+    <div class="card-body p-4">
+        
+        <div class="mb-3">
+            <label class="form-label fw-bold text-secondary">Nome dell'Evento / Fiera</label>
+            <input type="text" class="form-control" @bind="nomeFiera" placeholder="Es. Fiera del fumetto..." />
+        </div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <label class="form-label fw-bold text-secondary">Data di Inizio</label>
+                <input type="date" class="form-control" @bind="dataInizio" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label fw-bold text-secondary">Data di Fine</label>
+                <input type="date" class="form-control" @bind="dataFine" />
+            </div>
+        </div>
+
+        <button class="btn btn-primary w-100 fw-bold shadow-sm" @onclick="SalvaImpostazioni">
+            <i class="bi bi-save"></i> Salva e avvia il Countdown
+        </button>
+        <button class="btn btn-outline-danger w-100 mt-3" @onclick="ConfermaResettaFiera">
+            <i class="bi bi-trash3"></i> Elimina evento
+        </button>
+
+    </div>
+</div>
+
+<ConfirmDialog @ref="dialog" />
+
+@code {
+    private string nomeFiera = "";
+    private DateTime? dataInizio;
+    private DateTime? dataFine;
+    
+    private ConfirmDialog dialog = default!;
+
+    protected override void OnInitialized()
+    {
+        // Leggiamo i dati se esistono già
+        nomeFiera = Preferences.Default.Get("Evento_Nome", "");
+        
+        string inizioStr = Preferences.Default.Get("Evento_Inizio", "");
+        if (DateTime.TryParse(inizioStr, out DateTime dInizio)) dataInizio = dInizio;
+
+        string fineStr = Preferences.Default.Get("Evento_Fine", "");
+        if (DateTime.TryParse(fineStr, out DateTime dFine)) dataFine = dFine;
+    }
+
+    private void TornaAllaDashboard()
+    {
+        NavManager.NavigateTo("/");
+    }
+
+    private async Task SalvaImpostazioni()
+    {
+        if (string.IsNullOrWhiteSpace(nomeFiera) || !dataInizio.HasValue || !dataFine.HasValue)
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Warning, "Dati Incompleti", "Compila tutti i campi prima di salvare."));
+            return;
+        }
+
+        if (dataFine < dataInizio)
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Warning, "Errore Date", "La data di fine non può essere precedente a quella di inizio."));
+            return;
+        }
+
+        // Salviamo le impostazioni sul PC usando MAUI Preferences
+        Preferences.Default.Set("Evento_Nome", nomeFiera);
+        Preferences.Default.Set("Evento_Inizio", dataInizio.Value.ToString("yyyy-MM-dd"));
+        Preferences.Default.Set("Evento_Fine", dataFine.Value.ToString("yyyy-MM-dd"));
+
+        ToastService.Notify(new ToastMessage(ToastType.Success, "Evento Impostato", "Il countdown in Dashboard è stato aggiornato!"));
+        
+        // Aspettiamo un istante per far vedere il toast prima di cambiare pagina
+        await Task.Delay(1000);
+        TornaAllaDashboard();
+    }
+
+    private async Task ConfermaResettaFiera()
+    {
+        var options = new ConfirmDialogOptions
+        {
+            YesButtonText = "Sì, Azzera",
+            YesButtonColor = ButtonColor.Danger,
+            NoButtonText = "Annulla",
+            NoButtonColor = ButtonColor.Secondary
+        };
+
+        var conferma = await dialog.ShowAsync(
+            title: "Annulla Evento",
+            message1: "Sei sicuro di voler rimuovere l'evento' attualmente impostato?",
+            message2: "Il countdown sulla dashboard verrà azzerato.",
+            confirmDialogOptions: options);
+
+        if (conferma)
+        {
+            Preferences.Default.Remove("Evento_Nome");
+            Preferences.Default.Remove("Evento_Inizio");
+            Preferences.Default.Remove("Evento_Fine");
+
+            ToastService.Notify(new ToastMessage(ToastType.Danger, "Evento Rimosso", "Il countdown è stato azzerato."));
+            
+            await Task.Delay(1000);
+            TornaAllaDashboard();
+        }
+    }
+}

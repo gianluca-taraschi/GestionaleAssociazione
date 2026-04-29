@@ -1,0 +1,269 @@
+﻿@page "/bilancio"
+@using Gestionale_Drian.Data
+@using Gestionale_Drian.Services
+@using BlazorBootstrap
+@inject ProgettiService ProgettiService
+@inject MovimentiService MovimentiService
+@inject TransazioniService TransazioniService
+@inject ToastService ToastService
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="m-0 text-primary fw-bold"><i class="bi bi-wallet2 me-2"></i> Bilancio e Transazioni</h3>
+    <div class="d-flex gap-2">
+        <div class="input-group w-auto shadow-sm">
+            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+            <input type="text" class="form-control" placeholder="Cerca transazione..." @bind="testoRicerca" @bind:event="oninput" style="max-width: 250px;" />
+        </div>
+        @if (!mostraForm)
+        {
+            <Button Color="ButtonColor.Primary" Class="shadow-sm" @onclick="ApriForm">
+                <Icon Name="IconName.PlusLg" /> Nuova Operazione
+            </Button>
+        }
+    </div>
+</div>
+
+@if (mostraForm)
+{
+    <div class="card border-primary mb-4 shadow-sm">
+        <div class="card-header bg-primary text-white fw-bold">
+            Registra Entrata o Spesa Extra
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label text-secondary fw-bold">Tipo Movimento</label>
+                    <select class="form-select" @bind="tipoTransazioneStr">
+                        <option value="true">🟢 Entrata (Es. Donazione, Quota)</option>
+                        <option value="false">🔴 Uscita (Es. Rimborso, Attrezzi)</option>
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label text-secondary fw-bold">Descrizione *</label>
+                    <input type="text" class="form-control" @bind="nuovaTransazione.Descrizione" placeholder="Es. Donazione, Acquisto attrezzatura..." />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label text-secondary fw-bold">Importo (€) *</label>
+                    <input type="number" step="0.01" min="0" class="form-control" @bind="nuovaTransazione.Importo" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label text-secondary fw-bold">Data</label>
+                    <input type="date" class="form-control" @bind="nuovaTransazione.Data" />
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(messaggioErrore))
+            {
+                <div class="alert alert-danger mt-3 mb-0 py-2"><Icon Name="IconName.ExclamationTriangleFill" /> @messaggioErrore</div>
+            }
+
+            <div class="mt-4 border-top pt-3 d-flex justify-content-end">
+                <button class="btn btn-outline-secondary me-2" @onclick="ChiudiForm">Annulla</button>
+                <button class="btn btn-success fw-bold px-4" @onclick="SalvaTransazione"><i class="bi bi-save"></i> Conferma</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (transazioni == null)
+{
+    <p class="text-muted"><i class="spinner-border spinner-border-sm"></i> Calcolo bilancio in corso...</p>
+}
+else
+{
+    <div class="card shadow-sm border-0">
+        <div class="card-body bg-light border-bottom d-flex justify-content-around py-3">
+            <div class="text-center">
+                <span class="text-muted small fw-bold text-uppercase">Totale Entrate</span>
+                <h4 class="text-success m-0 fw-bold">@TransazioniFiltrate.Where(t => t.IsEntrata).Sum(t => t.Importo).ToString("C")</h4>
+            </div>
+            <div class="text-center">
+                <span class="text-muted small fw-bold text-uppercase">Totale Uscite</span>
+                <h4 class="text-danger m-0 fw-bold">@TransazioniFiltrate.Where(t => !t.IsEntrata).Sum(t => Math.Abs(t.Importo)).ToString("C")</h4>
+            </div>
+            <div class="text-center">
+                <span class="text-muted small fw-bold text-uppercase">Utile / Perdita</span>
+                <h4 class="@(SaldoAttuale >= 0 ? "text-success" : "text-danger") m-0 fw-bold">@SaldoAttuale.ToString("C")</h4>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle m-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Data</th>
+                        <th>Categoria / Origine</th>
+                        <th>Descrizione Operazione</th>
+                        <th class="text-end">Entrata</th>
+                        <th class="text-end">Uscita</th>
+                        <th class="text-center">Azioni</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!TransazioniFiltrate.Any())
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted">Nessuna transazione trovata.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var t in TransazioniFiltrate)
+                        {
+                            <tr>
+                                <td class="text-muted small">@t.Data.ToString("dd/MM/yyyy")</td>
+                                <td>
+                                    @if (t.Origine == "Progetto")
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success"><i class="bi bi-clipboard-check"></i> Progetto</span>
+                                    }
+                                    else if (t.Origine == "Materiale")
+                                    {
+
+                                        <span class="badge bg-danger-subtle text-danger border border-danger"><i class="bi bi-box-seam"></i> Materiale</span>
+                                    }
+                                    else
+                                    {
+
+                                        <span class="badge bg-primary-subtle text-primary border border-primary"><i class="bi bi-cash-coin"></i> Extra / Custom</span>
+                                    }
+                                </td>
+                                <td class="fw-semibold">@t.Descrizione</td>
+                                <td class="text-end">
+                                    @if (t.IsEntrata)
+                                    {
+                                        <span class="text-success fw-bold">+ @t.Importo.ToString("C")</span>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    @if (!t.IsEntrata)
+                                    {
+                                        <span class="text-danger fw-bold">- @Math.Abs(t.Importo).ToString("C")</span>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    @if (t.CustomId.HasValue)
+                                    {
+                                        <Button Color="ButtonColor.Danger" Size="ButtonSize.Small" @onclick="() => ApriModaleEliminazione(t.CustomId.Value)" title="Elimina transazione manuale">
+                                            <Icon Name="IconName.Trash3" />
+                                        </Button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<ConfirmDialog @ref="dialog" />
+
+@code {
+    private List<TransazioneView>? transazioni;
+    private string testoRicerca = "";
+
+    // Form Custom
+    private bool mostraForm = false;
+    private string messaggioErrore = "";
+    private TransazioneFinanziaria nuovaTransazione = new TransazioneFinanziaria();
+    private ConfirmDialog dialog = default!;
+
+    // Variabile temporanea per leggere correttamente la tendina HTML
+    private string tipoTransazioneStr = "true";
+
+    private decimal SaldoAttuale => TransazioniFiltrate.Where(t => t.IsEntrata).Sum(t => t.Importo) - TransazioniFiltrate.Where(t => !t.IsEntrata).Sum(t => t.Importo);
+
+    private IEnumerable<TransazioneView> TransazioniFiltrate =>
+        string.IsNullOrWhiteSpace(testoRicerca)
+            ? transazioni ?? new List<TransazioneView>()
+            : transazioni!.Where(t => t.Descrizione.Contains(testoRicerca, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CaricaDati();
+    }
+
+    private async Task CaricaDati()
+    {
+        var tempTransazioni = new List<TransazioneView>();
+
+        // 1. Progetti Consegnati
+        var progetti = await ProgettiService.GetProgettiAsync();
+        foreach (var p in progetti.Where(x => x.IsConsegnato && x.DataConsegna.HasValue))
+        {
+            tempTransazioni.Add(new TransazioneView { Data = p.DataConsegna!.Value, Descrizione = $"Incasso Progetto: {p.Titolo}", Importo = p.PrezzoTotale, IsEntrata = true, Origine = "Progetto" });
+        }
+
+        // 2. Acquisti Materiale (Solo "Carico")
+        var movimenti = await MovimentiService.GetMovimentiAsync();
+        foreach (var m in movimenti.Where(x => x.TipoOperazione == "Carico" && x.Articolo != null))
+        {
+            tempTransazioni.Add(new TransazioneView { Data = m.Data, Descrizione = $"Acquisto: {m.Articolo!.Nome} (Qtà: {m.Quantita})", Importo = (m.Quantita * m.Articolo.Prezzo), IsEntrata = false, Origine = "Materiale" });
+        }
+
+        // 3. Transazioni Custom (Extra, Donazioni, Rimborsi)
+        var custom = await TransazioniService.GetTransazioniAsync();
+        foreach (var c in custom)
+        {
+            tempTransazioni.Add(new TransazioneView { CustomId = c.Id, Data = c.Data, Descrizione = c.Descrizione, Importo = c.Importo, IsEntrata = c.IsEntrata, Origine = "Custom" });
+        }
+
+        transazioni = tempTransazioni.OrderByDescending(t => t.Data).ToList();
+    }
+
+    // --- LOGICA FORM ---
+
+    private void ApriForm()
+    {
+        nuovaTransazione = new TransazioneFinanziaria();
+        tipoTransazioneStr = "true"; // Resetta la tendina visiva su "Entrata"
+        messaggioErrore = "";
+        mostraForm = true;
+    }
+
+    private void ChiudiForm() { mostraForm = false; }
+
+    private async Task SalvaTransazione()
+    {
+        messaggioErrore = "";
+        if (string.IsNullOrWhiteSpace(nuovaTransazione.Descrizione)) { messaggioErrore = "Inserisci una descrizione."; return; }
+        if (nuovaTransazione.Importo <= 0) { messaggioErrore = "L'importo deve essere maggiore di zero."; return; }
+
+        // Trasformiamo la stringa della tendina in un vero booleano prima di salvare!
+        nuovaTransazione.IsEntrata = tipoTransazioneStr == "true";
+
+        await TransazioniService.AggiungiTransazioneAsync(nuovaTransazione);
+        
+        ToastService.Notify(new ToastMessage(ToastType.Success, "Bilancio", "Operazione finanziaria registrata."));
+        mostraForm = false;
+        await CaricaDati();
+    }
+
+    // --- ELIMINAZIONE TRANSAZIONI MANUALI ---
+
+    private async Task ApriModaleEliminazione(int id)
+    {
+        var options = new ConfirmDialogOptions { YesButtonText = "Elimina", YesButtonColor = ButtonColor.Danger, NoButtonText = "Annulla" };
+        var conferma = await dialog.ShowAsync("Elimina Operazione", "Vuoi eliminare questa transazione manuale dal bilancio?", confirmDialogOptions: options);
+
+        if (conferma)
+        {
+            await TransazioniService.EliminaTransazioneAsync(id);
+            ToastService.Notify(new ToastMessage(ToastType.Danger, "Bilancio", "Operazione eliminata."));
+            await CaricaDati();
+        }
+    }
+
+    // Classe locale d'appoggio per la vista unificata
+    private class TransazioneView
+    {
+        public int? CustomId { get; set; } // Null = Automatica (Progetto/Mat), Num = Manuale eliminabile
+        public DateTime Data { get; set; }
+        public string Descrizione { get; set; } = string.Empty;
+        public decimal Importo { get; set; }
+        public bool IsEntrata { get; set; }
+        public string Origine { get; set; } = string.Empty;
+    }
+}

@@ -1,0 +1,509 @@
+﻿@page "/progetti"
+@using Gestionale_Drian.Data
+@using Gestionale_Drian.Services
+@using BlazorBootstrap
+@inject ProgettiService ProgettiService
+@inject AssociatiService AssociatiService
+@inject ArticoliService ArticoliService
+@inject PdfService PdfService
+@inject ToastService ToastService
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="m-0 text-primary fw-bold"><i class="bi bi-clipboard-check-fill me-2"></i> Gestione Progetti e Preventivi</h3>
+    
+    <div class="d-flex gap-2">
+        <div class="input-group w-auto shadow-sm">
+            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+            <input type="text" class="form-control" placeholder="Cerca progetto..." @bind="testoRicercaProgetti" @bind:event="oninput" style="max-width: 250px;" />
+        </div>
+        
+        @if (!mostraForm)
+        {
+            <Button Color="ButtonColor.Primary" Class="shadow-sm" @onclick="ApriForm">
+                <Icon Name="IconName.FolderPlus" /> Nuovo Progetto
+            </Button>
+        }
+    </div>
+</div>
+
+@if (mostraForm)
+{
+    <div class="card border-primary mb-4 shadow-sm">
+        <div class="card-header bg-primary text-white fw-bold">
+            Dettagli Progetto e Generazione Preventivo
+        </div>
+        <div class="card-body">
+            
+            <div class="row g-3 mb-4">
+                <div class="col-md-8">
+                    <label class="form-label text-secondary fw-bold">Titolo Progetto / Oggetto *</label>
+                    <input type="text" class="form-control" @bind="progettoCorrente.Titolo" placeholder="Nuovo progetto..." />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label text-secondary fw-bold">Sconto Base (%)</label>
+                    <input type="number" class="form-control" @bind="progettoCorrente.ScontoPercentuale" @bind:after="CalcolaTotale" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label text-secondary fw-bold">Prezzo FINALE (€)</label>
+                    <input type="number" step="0.01" class="form-control fw-bold text-primary" @bind="progettoCorrente.PrezzoTotale" />
+                </div>
+            </div>
+
+            <hr class="text-muted my-3" />
+
+            <div class="card bg-light border-0 mb-4 shadow-sm">
+                <div class="card-body">
+                    <h6 class="fw-bold text-secondary mb-3"><i class="bi bi-building"></i> Intestazione Documento (Mittente)</h6>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="small fw-bold">Nome Azienda / Professionista</label>
+                            <input type="text" class="form-control form-control-sm" @bind="progettoCorrente.MittenteNome" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold">P.IVA / C.F.</label>
+                            <input type="text" class="form-control form-control-sm" @bind="progettoCorrente.MittenteCodiceFiscale" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold">Indirizzo Sede</label>
+                            <input type="text" class="form-control form-control-sm" @bind="progettoCorrente.MittenteIndirizzo" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold">Contatti (Email/Tel)</label>
+                            <input type="text" class="form-control form-control-sm" @bind="progettoCorrente.MittenteContatti" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h6 class="fw-bold text-primary mb-3"><i class="bi bi-list-columns-reverse"></i> Dettaglio Voci Preventivo</h6>
+            <div class="row g-2 align-items-end bg-light p-3 rounded border mb-3">
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">1. Pesca da Inventario</label>
+                    <select class="form-select form-select-sm" @onchange="OnArticoloSelezionato">
+                        <option value="0">-- Scrivi a mano o scegli --</option>
+                        @if (articoliDisponibili != null)
+                        {
+                            @foreach (var art in articoliDisponibili)
+                            {
+                                <option value="@art.Id">@art.Nome (€ @art.Prezzo)</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">2. Descrizione Lavoro/Materiale *</label>
+                    <input type="text" class="form-control form-control-sm" @bind="nuovaVoce.Descrizione" placeholder="Es. Manodopera, materiali..." />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">3. Qtà</label>
+                    <input type="number" min="1" class="form-control form-control-sm" @bind="nuovaVoce.Quantita" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">4. Prezzo Unit. (€)</label>
+                    <input type="number" step="0.01" class="form-control form-control-sm" @bind="nuovaVoce.PrezzoUnitario" />
+                </div>
+                <div class="col-md-1">
+                    <button class="btn btn-sm btn-success w-100 mb-1" @onclick="AggiungiVoce"><i class="bi bi-plus-lg"></i></button>
+                </div>
+            </div>
+
+            @if (progettoCorrente.VociPreventivo.Count > 0)
+            {
+                <table class="table table-sm table-bordered align-middle mb-4">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Descrizione</th>
+                            <th class="text-center">Qtà</th>
+                            <th class="text-end">P. Unitario</th>
+                            <th class="text-end">Importo</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var voce in progettoCorrente.VociPreventivo)
+                        {
+                            <tr>
+                                <td>@voce.Descrizione</td>
+                                <td class="text-center">@voce.Quantita</td>
+                                <td class="text-end">@voce.PrezzoUnitario.ToString("C")</td>
+                                <td class="text-end fw-bold">@voce.Importo.ToString("C")</td>
+                                <td class="text-center">
+                                    <button class="btn btn-sm btn-outline-danger py-0 px-1" @onclick="() => RimuoviVoce(voce)"><i class="bi bi-x"></i></button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="3" class="text-end text-muted small">Totale lordo parziale:</td>
+                            <td class="text-end text-muted small">@progettoCorrente.TotaleVoci.ToString("C")</td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td colspan="3" class="text-end fw-bold text-primary">TOTALE(@progettoCorrente.ScontoPercentuale%):</td>
+                            <td class="text-end fw-bold text-primary">@progettoCorrente.TotaleScontato.ToString("C")</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            }
+            else
+            {
+                <div class="alert alert-warning py-2 small">Nessuna voce inserita. Il preventivo sarà vuoto.</div>
+            }
+
+            <hr class="text-muted my-3" />
+            
+            <h6 class="fw-bold text-primary mb-3 mt-4"><i class="bi bi-file-text"></i> Condizioni di Vendita</h6>
+            <div class="row g-3 mb-4 bg-light p-3 rounded border">
+                <div class="col-md-12">
+                    <label class="form-label text-secondary small fw-bold">Metodo e modalità di pagamento</label>
+                    <input type="text" class="form-control" @bind="progettoCorrente.MetodoPagamento" />
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label text-secondary small fw-bold">Tipologia di consegna</label>
+                    <input type="text" class="form-control" @bind="progettoCorrente.TipologiaConsegna" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label text-secondary small fw-bold">Tempo stimato (gg. lavorativi)</label>
+                    <input type="text" class="form-control" @bind="progettoCorrente.GiorniConsegna" />
+                </div>
+            </div>
+            
+            <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                    <label class="form-label text-secondary fw-bold mb-3"><i class="bi bi-info-circle"></i> Stato di Avanzamento</label>
+                    <div class="card bg-light border-0 p-3 shadow-sm">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="switchCompletato" @bind="progettoCorrente.IsCompletato">
+                            <label class="form-check-label fw-bold" for="switchCompletato">Lavori Completati</label>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="switchConsegnato" @bind="progettoCorrente.IsConsegnato">
+                            <label class="form-check-label fw-bold" for="switchConsegnato">Progetto Consegnato / Chiuso</label>
+                        </div>
+                        <div class="mt-3 border-top pt-2">
+                            <label class="form-label text-secondary small fw-bold">Data Scadenza Prevista (Giallo nel Calendario)</label>
+                            <input type="date" class="form-control form-control-sm" @bind="progettoCorrente.DataScadenza" />
+                        </div>
+                        @if (progettoCorrente.IsConsegnato)
+                        {
+                            <div class="mt-3">
+                                <label class="form-label text-secondary small fw-bold">Data di Consegna effettiva</label>
+                                <input type="date" class="form-control form-control-sm" @bind="progettoCorrente.DataConsegna" />
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label text-secondary fw-bold mb-3"><i class="bi bi-person-badge"></i> Seleziona Committente</label>
+                    <div class="card border-light p-3 bg-light shadow-sm">
+                        <div class="input-group input-group-sm mb-2">
+                            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control" placeholder="Cerca per nome o cognome..." @bind="testoRicercaSocio" @bind:event="oninput" />
+                        </div>
+                        
+                        <div class="list-group list-group-flush border bg-white rounded" style="max-height: 120px; overflow-y: auto;">
+                            @if (AssociatiFiltrati != null && AssociatiFiltrati.Any())
+                            {
+                                @foreach (var socio in AssociatiFiltrati)
+                                {
+                                    <label class="list-group-item list-group-item-action py-1 px-2 m-0" style="cursor: pointer;">
+                                        <input class="form-check-input me-2" type="radio" name="committenteRadio"
+                                               checked="@(richiedenteSelezionatoId == socio.Id)"
+                                               @onchange="@(() => richiedenteSelezionatoId = socio.Id)" />
+                                        <span class="small">@socio.Cognome @socio.Nome</span>
+                                    </label>
+                                }
+                            }
+                            else
+                            {
+                                <div class="p-2 text-muted small text-center">Nessun associato trovato.</div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(messaggioErrore))
+            {
+                <div class="alert alert-danger mb-4 py-2">@messaggioErrore</div>
+            }
+
+            <div class="mt-4 pt-3 border-top d-flex justify-content-end">
+                <button class="btn btn-outline-secondary me-2" @onclick="ChiudiForm">Annulla</button>
+                <button class="btn btn-success px-4 fw-bold" @onclick="SalvaProgetto"><i class="bi bi-save"></i> Salva Progetto</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (progetti == null)
+{
+    <p class="text-muted"><i class="spinner-border spinner-border-sm"></i> Caricamento progetti...</p>
+}
+else
+{
+    <div class="card shadow-sm border-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle m-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Titolo Progetto</th>
+                        <th>Importo Finale</th>
+                        <th>Stato</th>
+                        <th>Committente</th>
+                        <th class="text-center">Azioni</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (ProgettiFiltrati != null && !ProgettiFiltrati.Any())
+                    {
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-muted fst-italic">Nessun progetto trovato con questo nome.</td>
+                        </tr>
+                    }
+                    else if (ProgettiFiltrati != null)
+                    {
+                        @foreach (var prog in ProgettiFiltrati.OrderByDescending(p => p.Id))
+                        {
+                            <tr>
+                                <td class="fw-bold text-primary">@prog.Titolo</td>
+                                <td class="fw-bold">@prog.PrezzoTotale.ToString("C")</td>
+                                <td>
+                                    @if (prog.IsConsegnato)
+                                    {
+                                        <span class="badge bg-success"><i class="bi bi-check2-all"></i> Consegnato</span>
+                                    }
+                                    else if (prog.IsCompletato)
+                                    {
+                                        <span class="badge bg-info text-dark"><i class="bi bi-check2"></i> Da Consegnare</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning text-dark"><i class="bi bi-tools"></i> In Corso</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (prog.Membri != null && prog.Membri.Count > 0)
+                                    {
+                                        var committente = prog.Membri.First();
+                                        <span class="fw-semibold text-secondary">
+                                            <i class="bi bi-person-circle"></i> @committente.Cognome @committente.Nome
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small fst-italic">Nessuno</span>
+                                    }
+                                </td>
+                                <td class="text-center text-nowrap">
+                                    <a class="btn btn-sm btn-info text-white me-1" href="progetto/@prog.Id" title="Dettagli e Foto">
+                                        <i class="bi bi-eye-fill"></i>
+                                    </a>
+                                    <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => GeneraEApriPdf(prog)" title="Stampa Preventivo PDF">
+                                        <i class="bi bi-file-earmark-pdf-fill"></i>
+                                    </button>
+                                    <Button Color="ButtonColor.Danger" Size="ButtonSize.Small" @onclick="() => ApriModaleEliminazione(prog)" title="Elimina progetto">
+                                        <Icon Name="IconName.Trash3" />
+                                    </Button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<ConfirmDialog @ref="dialog" />
+
+@code {
+    private List<Progetto>? progetti;
+    private List<Associato>? tuttiAssociati;
+    private List<Articolo>? articoliDisponibili;
+    
+    private Progetto progettoCorrente = new();
+    private VocePreventivo nuovaVoce = new VocePreventivo { Quantita = 1 };
+    
+    private bool mostraForm = false;
+    private string messaggioErrore = "";
+    
+    // Riferimento al Modal
+    private ConfirmDialog dialog = default!;
+    
+    private int richiedenteSelezionatoId = 0;
+    
+    // Ricerca Associato nel form
+    private string testoRicercaSocio = "";
+
+    private IEnumerable<Associato>? AssociatiFiltrati =>
+        string.IsNullOrWhiteSpace(testoRicercaSocio)
+            ? tuttiAssociati
+            : tuttiAssociati?.Where(a =>
+                a.Nome.Contains(testoRicercaSocio, StringComparison.OrdinalIgnoreCase) ||
+                a.Cognome.Contains(testoRicercaSocio, StringComparison.OrdinalIgnoreCase));
+
+    // Ricerca Progetto
+    private string testoRicercaProgetti = "";
+
+    private IEnumerable<Progetto>? ProgettiFiltrati =>
+        string.IsNullOrWhiteSpace(testoRicercaProgetti)
+            ? progetti
+            : progetti?.Where(p =>
+                p.Titolo.Contains(testoRicercaProgetti, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CaricaDati();
+        articoliDisponibili = await ArticoliService.GetArticoliAsync();
+    }
+
+    private async Task CaricaDati()
+    {
+        progetti = await ProgettiService.GetProgettiAsync();
+        tuttiAssociati = await AssociatiService.GetAssociatiAsync();
+    }
+
+    private void ApriForm()
+    {
+        progettoCorrente = new Progetto
+        {
+            // Pre-compila con i tuoi dati standard per faticare meno!
+            MittenteNome = "Il Mio Nome o Associazione",
+            MittenteIndirizzo = "Via Roma 1, 00100 Città",
+            MittenteCodiceFiscale = "RSSMRA80A01H501U",
+            MittenteContatti = "Tel: 333 1234567 | email@mia.it"
+        };
+        nuovaVoce = new VocePreventivo { Quantita = 1 };
+        richiedenteSelezionatoId = 0;
+        testoRicercaSocio = "";
+        messaggioErrore = "";
+        mostraForm = true;
+    }
+
+    private void ChiudiForm()
+    {
+        mostraForm = false;
+    }
+
+    private void OnArticoloSelezionato(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int id) && id > 0)
+        {
+            var art = articoliDisponibili?.FirstOrDefault(a => a.Id == id);
+            if (art != null)
+            {
+                nuovaVoce.Descrizione = art.Nome;
+                nuovaVoce.PrezzoUnitario = art.Prezzo;
+            }
+        }
+    }
+
+    private void AggiungiVoce()
+    {
+        if (string.IsNullOrWhiteSpace(nuovaVoce.Descrizione) || nuovaVoce.Quantita <= 0) return;
+
+        progettoCorrente.VociPreventivo.Add(new VocePreventivo
+        {
+            Descrizione = nuovaVoce.Descrizione,
+            Quantita = nuovaVoce.Quantita,
+            PrezzoUnitario = nuovaVoce.PrezzoUnitario
+        });
+        
+        nuovaVoce = new VocePreventivo { Quantita = 1 };
+        CalcolaTotale();
+    }
+
+    private void RimuoviVoce(VocePreventivo voce)
+    {
+        progettoCorrente.VociPreventivo.Remove(voce);
+        CalcolaTotale();
+    }
+
+    private void CalcolaTotale()
+    {
+        progettoCorrente.PrezzoTotale = progettoCorrente.TotaleScontato;
+    }
+
+    private async Task SalvaProgetto()
+    {
+        messaggioErrore = "";
+        if (string.IsNullOrWhiteSpace(progettoCorrente.Titolo))
+        {
+            messaggioErrore = "Il titolo del progetto è obbligatorio.";
+            return;
+        }
+        
+        if (richiedenteSelezionatoId == 0)
+        {
+            messaggioErrore = "Seleziona un committente dalla lista.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(progettoCorrente.MittenteNome))
+        {
+            messaggioErrore = "Il nome del mittente è obbligatorio per il preventivo.";
+            return;
+        }
+
+        if (progettoCorrente.IsConsegnato && !progettoCorrente.DataConsegna.HasValue)
+            progettoCorrente.DataConsegna = DateTime.Now.Date;
+
+        var listaMembri = new List<int> { richiedenteSelezionatoId };
+        await ProgettiService.AggiungiProgettoAsync(progettoCorrente, listaMembri);
+        
+        ToastService.Notify(new ToastMessage(ToastType.Success, "Progetto Creato", $"Il progetto '{progettoCorrente.Titolo}' è stato registrato!"));
+        
+        mostraForm = false;
+        await CaricaDati();
+    }
+
+    private async Task ApriModaleEliminazione(Progetto prog)
+    {
+        var options = new ConfirmDialogOptions
+        {
+            YesButtonText = "Sì, Elimina",
+            YesButtonColor = ButtonColor.Danger,
+            NoButtonText = "Annulla",
+            NoButtonColor = ButtonColor.Secondary
+        };
+
+        var conferma = await dialog.ShowAsync(
+            title: "Conferma Eliminazione Progetto",
+            message1: $"Sei sicuro di voler eliminare il progetto '{prog.Titolo}'?",
+            message2: "L'operazione rimuoverà il progetto dal database.",
+            confirmDialogOptions: options);
+
+        if (conferma)
+        {
+            await ProgettiService.EliminaProgettoAsync(prog.Id);
+            ToastService.Notify(new ToastMessage(ToastType.Danger, "Eliminato", "Il progetto è stato rimosso definitivamente."));
+            await CaricaDati();
+        }
+    }
+
+    private void GeneraEApriPdf(Progetto prog)
+    {
+        try
+        {
+            string percorsoPdf = PdfService.GeneraPreventivoPdf(prog);
+            prog.PreventivoPdfPath = percorsoPdf;
+            _ = ProgettiService.AggiornaProgettoAsync(prog);
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = percorsoPdf,
+                UseShellExecute = true
+            });
+            
+            ToastService.Notify(new ToastMessage(ToastType.Info, "PDF Generato", "Il preventivo è stato aperto."));
+        }
+        catch (Exception ex)
+        {
+            messaggioErrore = $"Errore durante la generazione del PDF: {ex.Message}";
+        }
+    }
+}

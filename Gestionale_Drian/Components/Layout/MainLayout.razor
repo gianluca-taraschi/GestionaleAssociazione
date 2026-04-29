@@ -1,0 +1,49 @@
+﻿@inherits LayoutComponentBase
+@using BlazorBootstrap
+@using Microsoft.Maui.Storage
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row px-3 px-md-4 shadow-sm bg-white d-flex justify-content-between align-items-center">
+            
+            <div class="d-flex align-items-center text-truncate me-2">
+                <h5 class="m-0 fw-bold text-secondary d-none d-md-block">
+                    Gestionale
+                </h5>
+                <h5 class="m-0 fw-bold text-secondary d-md-none">
+                    Magazzino
+                </h5>
+            </div>
+
+            <div class="d-flex align-items-center flex-nowrap">
+                <a href="/profilo" class="me-2 me-md-3 text-decoration-none text-muted d-flex align-items-center hover-card p-1 rounded" style="cursor: pointer;" title="Impostazioni Profilo">
+                    <i class="bi bi-person-circle text-primary fs-5 me-1"></i>
+                    <span class="d-none d-sm-inline me-1">Ciao,</span>
+                    <strong class="text-dark text-truncate d-inline-block" style="max-width: 100px;">
+                        @nomeUtente
+                    </strong>
+                </a>
+            </div>
+        </div>
+
+        <article class="content px-4 py-4 bg-light" style="min-height: calc(100vh - 3.5rem);">
+            @Body
+        </article>
+    </main>
+</div>
+
+<Toasts class="p-3" AutoHide="true" Delay="4000" Placement="ToastsPlacement.BottomRight" />
+
+@code {
+    private string nomeUtente = "Admin";
+
+    protected override void OnInitialized()
+    {
+        // Legge il nome salvato, se non esiste usa "Admin" di default
+        nomeUtente = Preferences.Default.Get("NomeUtente", "Admin");
+    }
+}

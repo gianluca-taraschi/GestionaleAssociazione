@@ -1,0 +1,541 @@
+﻿@page "/progetto/{Id:int}"
+@using System.IO
+@using Gestionale_Drian.Data
+@using Gestionale_Drian.Services
+@using BlazorBootstrap
+@inject ProgettiService ProgettiService
+@inject PdfService PdfService
+@inject NavigationManager NavManager
+@inject ToastService ToastService
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex align-items-center">
+        <button class="btn btn-outline-secondary me-3 shadow-sm" @onclick="TornaIndietro"><i class="bi bi-arrow-left"></i> Indietro</button>
+        <h3 class="m-0 text-primary fw-bold text-truncate" style="max-width: 500px;">@progetto?.Titolo</h3>
+    </div>
+    
+    <div class="d-flex gap-2">
+        <button class="btn btn-primary shadow-sm" @onclick="GeneraEApriPdf" title="Genera e apri il preventivo in PDF">
+            <i class="bi bi-file-earmark-pdf-fill"></i> Preventivo
+        </button>
+        <button class="btn btn-secondary shadow-sm" @onclick="ApriCartellaInWindows" title="Apri la cartella dei file nel PC">
+            <i class="bi bi-folder2-open"></i> Sfoglia File
+        </button>
+    </div>
+</div>
+
+@if (progetto == null)
+{
+    <p class="text-muted"><i class="spinner-border spinner-border-sm"></i> Caricamento in corso...</p>
+}
+else
+{
+    <div class="row g-4">
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white pt-3 pb-0 border-0">
+                    <h5 class="fw-bold text-secondary"><i class="bi bi-pencil-square"></i> Aggiorna Informazioni</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted">Descrizione e Note</label>
+                        <textarea class="form-control" rows="6" @bind="progetto.Descrizione" placeholder="Appunti di lavorazione..."></textarea>
+                    </div>
+
+                    <div class="card bg-light border-0 p-3 mb-4">
+                        <label class="form-label fw-bold small text-muted mb-2">Stato Avanzamento</label>
+                        
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="detCompletato" @bind="progetto.IsCompletato" @bind:after='() => AvvisoStato("Lavori Completati")'>
+                            <label class="form-check-label fw-semibold" for="detCompletato">Lavori Completati</label>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="detConsegnato" @bind="progetto.IsConsegnato" @bind:after='() => AvvisoStato("Progetto Consegnato")'>
+                            <label class="form-check-label fw-semibold" for="detConsegnato">Consegnato al Cliente</label>
+                        </div>
+
+                        <div class="mt-3 border-top pt-3">
+                            <label class="form-label fw-bold small text-warning text-darken-2 mb-1"><i class="bi bi-calendar-event"></i> Scadenza Calendario</label>
+                            <input type="date" class="form-control form-control-sm" @bind="progetto.DataScadenza" @bind:after="AvvisoDataScadenza" />
+                        </div>
+
+                        @if (progetto.IsConsegnato)
+                        {
+                            <div class="mt-3 border-top pt-3">
+                                <label class="form-label fw-bold small text-success mb-1"><i class="bi bi-calendar-check"></i> Data di Consegna</label>
+                                <input type="date" class="form-control form-control-sm" @bind="progetto.DataConsegna" />
+                            </div>
+                        }
+                    </div>
+
+                    <button class="btn btn-success w-100 fw-bold shadow-sm" @onclick="SalvaModifiche"><i class="bi bi-save"></i> Salva Modifiche</button>
+                    
+                    @if (salvataggioOk)
+                    {
+                        <div class="alert alert-success mt-3 py-2 small text-center"><i class="bi bi-check-circle"></i> Salvato con successo!</div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white pt-3 pb-0 border-0">
+                    <h5 class="fw-bold text-secondary"><i class="bi bi-images"></i> Galleria e Documenti</h5>
+                </div>
+                <div class="card-body">
+                    
+                    <div class="mb-4">
+                        <h6 class="fw-bold mb-2"><i class="bi bi-filetype-pdf text-danger"></i> Cartamodelli e Documenti (PDF)</h6>
+                        
+                        <div class="input-group mb-3 shadow-sm">
+                            <span class="input-group-text bg-white border-danger text-danger"><i class="bi bi-upload"></i></span>
+                            <InputFile OnChange="@(e => CaricaFile(e, "Cartamodelli"))" multiple accept=".pdf" class="form-control border-danger" />
+                        </div>
+
+                        <div class="d-flex flex-wrap gap-2">
+                            @if (!fileCartamodelli.Any())
+                            {
+                                <span class="small text-muted fst-italic px-2">Nessun cartamodello caricato.</span>
+                            }
+                            @foreach (var pdf in fileCartamodelli)
+                            {
+                                <div class="card bg-white border shadow-sm p-2 d-flex flex-row align-items-center gap-2 hover-card" style="width: 250px;">
+                                    <i class="bi bi-file-pdf-fill fs-3 text-danger" style="cursor: pointer;" @onclick="() => ApriFileEsterno(pdf.PathFile)"></i>
+                                    <div class="flex-grow-1 text-truncate small fw-semibold" style="cursor: pointer;" @onclick="() => ApriFileEsterno(pdf.PathFile)" title="@pdf.NomeFile">
+                                        @pdf.NomeFile
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-danger border-0" @onclick="() => ConfermaEliminaFile(pdf)" title="Elimina PDF">
+                                        <i class="bi bi-trash3"></i>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="mb-4 border-top pt-3">
+                        <h6 class="fw-bold mb-2"><i class="bi bi-bookmark-star text-primary"></i> Reference (Immagini di Riferimento)</h6>
+                        
+                        <div class="input-group mb-3 shadow-sm">
+                            <span class="input-group-text bg-white border-primary text-primary"><i class="bi bi-image"></i></span>
+                            <InputFile OnChange="@(e => CaricaFile(e, "Reference"))" multiple accept="image/*" class="form-control border-primary" />
+                        </div>
+
+                        <div class="d-flex flex-wrap gap-2">
+                            @if (!fotoReference.Any())
+                            {
+                                <span class="small text-muted fst-italic px-2">Nessuna foto caricata.</span>
+                            }
+                            @foreach (var foto in fotoReference)
+                            {
+                                <div class="position-relative d-inline-block">
+                                    <img src="@foto.Base64" class="img-thumbnail shadow-sm hover-zoom" @onclick="() => ApriZoom(foto.Base64)" />
+                                    <button class="btn btn-sm btn-danger position-absolute top-0 end-0 m-1 p-1 rounded-circle btn-delete-badge" @onclick="() => ConfermaEliminaFile(foto)" title="Elimina foto">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="mb-4 border-top pt-3">
+                        <h6 class="fw-bold mb-2"><i class="bi bi-tools text-info"></i> WIP (Work In Progress)</h6>
+                        
+                        <div class="input-group mb-3 shadow-sm">
+                            <span class="input-group-text bg-white border-info text-info"><i class="bi bi-camera"></i></span>
+                            <InputFile OnChange="@(e => CaricaFile(e, "WIP"))" multiple accept="image/*" class="form-control border-info" />
+                        </div>
+
+                        <div class="d-flex flex-wrap gap-2">
+                            @if (!fotoWIP.Any())
+                            {
+                                <span class="small text-muted fst-italic px-2">Nessun WIP caricato.</span>
+                            }
+                            @foreach (var foto in fotoWIP)
+                            {
+                                <div class="position-relative d-inline-block">
+                                    <img src="@foto.Base64" class="img-thumbnail shadow-sm hover-zoom" @onclick="() => ApriZoom(foto.Base64)" />
+                                    <button class="btn btn-sm btn-danger position-absolute top-0 end-0 m-1 p-1 rounded-circle btn-delete-badge" @onclick="() => ConfermaEliminaFile(foto)" title="Elimina foto">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="border-top pt-3">
+                        <h6 class="fw-bold mb-2"><i class="bi bi-stars text-success"></i> Progetto Concluso</h6>
+                        
+                        <div class="input-group mb-3 shadow-sm">
+                            <span class="input-group-text bg-white border-success text-success"><i class="bi bi-check-circle"></i></span>
+                            <InputFile OnChange="@(e => CaricaFile(e, "Conclusi"))" multiple accept="image/*" class="form-control border-success" />
+                        </div>
+
+                        <div class="d-flex flex-wrap gap-2">
+                            @if (!fotoConclusi.Any())
+                            {
+                                <span class="small text-muted fst-italic px-2">Nessuna foto finale caricata.</span>
+                            }
+                            @foreach (var foto in fotoConclusi)
+                            {
+                                <div class="position-relative d-inline-block">
+                                    <img src="@foto.Base64" class="img-thumbnail shadow-sm hover-zoom" @onclick="() => ApriZoom(foto.Base64)" />
+                                    <button class="btn btn-sm btn-danger position-absolute top-0 end-0 m-1 p-1 rounded-circle btn-delete-badge" @onclick="() => ConfermaEliminaFile(foto)" title="Elimina foto">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<ConfirmDialog @ref="dialog" />
+
+@if (!string.IsNullOrEmpty(immagineZoomata))
+{
+    <div class="fullscreen-overlay" @onclick="ChiudiZoom" @onwheel="GestisciRotellinaMouse" @onwheel:preventDefault="true">
+        <button class="btn-close-zoom" @onclick="ChiudiZoom"><i class="bi bi-x-lg"></i></button>
+        
+        <div class="fullscreen-image-wrapper">
+            <img src="@immagineZoomata" class="fullscreen-image" style="transform: scale(@(livelloZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)));" @onclick:stopPropagation="true" />
+        </div>
+
+        <div class="zoom-controls shadow-lg" @onclick:stopPropagation="true">
+            <button class="btn btn-dark rounded-circle" @onclick="ZoomOut" title="Zoom Out"><i class="bi bi-zoom-out"></i></button>
+            <button class="btn btn-dark rounded-circle" @onclick="ResetZoom" title="Resetta"><i class="bi bi-arrow-counterclockwise"></i></button>
+            <button class="btn btn-dark rounded-circle" @onclick="ZoomIn" title="Zoom In"><i class="bi bi-zoom-in"></i></button>
+        </div>
+    </div>
+}
+
+<style>
+    /* CSS Pulito: abbiamo rimosso tutte le classi dropzone! */
+    .hover-zoom {
+        width: 110px; height: 110px; object-fit: cover;
+        cursor: pointer; transition: transform 0.2s ease;
+    }
+    .hover-zoom:hover { transform: scale(1.05); }
+    .btn-delete-badge { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; opacity: 0.8; }
+    .btn-delete-badge:hover { opacity: 1; }
+
+    .fullscreen-overlay {
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background-color: rgba(0,0,0,0.85); z-index: 1050;
+        display: flex; justify-content: center; align-items: center;
+        backdrop-filter: blur(5px);
+    }
+    .fullscreen-image-wrapper {
+        width: 100%; height: 100%;
+        display: flex; justify-content: center; align-items: center;
+        overflow: auto;
+    }
+    .fullscreen-image {
+        max-width: 90vw; max-height: 90vh;
+        width: auto; height: auto;
+        object-fit: contain;
+        border-radius: 8px;
+        box-shadow: 0 0 30px rgba(0,0,0,0.5);
+        transition: transform 0.1s ease-out;
+    }
+    .btn-close-zoom {
+        position: absolute; top: 20px; right: 30px;
+        background: transparent; border: none;
+        color: white; font-size: 2.5rem; cursor: pointer; z-index: 1060;
+        transition: transform 0.2s ease;
+    }
+    .btn-close-zoom:hover { transform: scale(1.2); }
+    .zoom-controls {
+        position: absolute; bottom: 30px;
+        background: rgba(0,0,0,0.6); padding: 10px; border-radius: 50px;
+        display: flex; gap: 15px; z-index: 1060;
+    }
+</style>
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Progetto? progetto;
+    private bool salvataggioOk = false;
+
+    private ConfirmDialog dialog = default!;
+    private string? immagineZoomata = null;
+    private double livelloZoom = 1.0;
+
+    public class MediaItem
+    {
+        public string PathFile { get; set; } = string.Empty;
+        public string NomeFile { get; set; } = string.Empty;
+        public string Base64 { get; set; } = string.Empty;
+        public bool IsPdf { get; set; }
+    }
+
+    private List<MediaItem> fileCartamodelli = new();
+    private List<MediaItem> fotoReference = new();
+    private List<MediaItem> fotoWIP = new();
+    private List<MediaItem> fotoConclusi = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var lista = await ProgettiService.GetProgettiAsync();
+        progetto = lista.FirstOrDefault(p => p.Id == this.Id);
+
+        if (progetto != null)
+        {
+            CaricaGalleriaDaDisco();
+        }
+    }
+
+    private void TornaIndietro()
+    {
+        NavManager.NavigateTo("/progetti");
+    }
+
+    private async Task SalvaModifiche()
+    {
+        if (progetto != null)
+        {
+            if (progetto.IsConsegnato && !progetto.DataConsegna.HasValue)
+                progetto.DataConsegna = DateTime.Now.Date;
+
+            await ProgettiService.AggiornaProgettoAsync(progetto);
+            
+            ToastService.Notify(new ToastMessage(ToastType.Success, "Salvataggio", "Tutte le modifiche alla scheda sono state salvate."));
+            
+            salvataggioOk = true;
+            await Task.Delay(3000);
+            salvataggioOk = false;
+        }
+    }
+
+    private void AvvisoStato(string nuovoStato)
+    {
+        ToastService.Notify(new ToastMessage(ToastType.Warning, "Modifica in sospeso", $"Impostato come '{nuovoStato}'. Ricordati di premere 'Salva Modifiche' per confermare."));
+    }
+
+    private void AvvisoDataScadenza()
+    {
+        if (progetto != null)
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Warning, "Data Scadenza Modificata", $"Nuova scadenza: {progetto.DataScadenza:dd/MM/yyyy}. Ricordati di salvare."));
+        }
+    }
+
+    private void GeneraEApriPdf()
+    {
+        if (progetto == null) return;
+        try
+        {
+            string percorsoPdf = PdfService.GeneraPreventivoPdf(progetto);
+            progetto.PreventivoPdfPath = percorsoPdf;
+            _ = ProgettiService.AggiornaProgettoAsync(progetto);
+
+            ApriFileEsterno(percorsoPdf);
+            ToastService.Notify(new ToastMessage(ToastType.Info, "PDF Generato", "Il preventivo è stato creato e aperto."));
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Danger, "Errore", $"Impossibile generare il PDF: {ex.Message}"));
+        }
+    }
+
+    private void ApriCartellaInWindows()
+    {
+        try
+        {
+            string cartellaBase = OttieniCartellaProgettoBase();
+            ApriFileEsterno(cartellaBase);
+        }
+        catch (Exception)
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Danger, "Errore Cartella", "Impossibile aprire Esplora Risorse in automatico."));
+        }
+    }
+
+    private void ApriFileEsterno(string path)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = path,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Danger, "Errore File", $"Impossibile aprire: {ex.Message}"));
+        }
+    }
+
+    private void ApriZoom(string base64Image)
+    {
+        immagineZoomata = base64Image;
+        livelloZoom = 1.0;
+    }
+    
+    private void ChiudiZoom() { immagineZoomata = null; }
+    
+    private void ZoomIn() { if (livelloZoom < 5.0) livelloZoom += 0.15; }
+    private void ZoomOut() { if (livelloZoom > 0.3) livelloZoom -= 0.15; }
+    private void ResetZoom() { livelloZoom = 1.0; }
+
+    private void GestisciRotellinaMouse(WheelEventArgs e)
+    {
+        if (e.DeltaY < 0) ZoomIn();
+        else if (e.DeltaY > 0) ZoomOut();
+    }
+
+    private string OttieniCartellaProgettoBase()
+    {
+        string documenti = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        
+        string titoloPulito = "SenzaTitolo";
+        if (progetto != null && !string.IsNullOrWhiteSpace(progetto.Titolo))
+        {
+            titoloPulito = string.Join("_", progetto.Titolo.Split(Path.GetInvalidFileNameChars()));
+        }
+        
+        string nomeCartella = $"{Id} - {titoloPulito}";
+        string cartellaBase = Path.Combine(documenti, "Gestionale_Drian", "FotoProgetti", nomeCartella);
+        
+        if (!Directory.Exists(cartellaBase))
+            Directory.CreateDirectory(cartellaBase);
+            
+        return cartellaBase;
+    }
+
+    private string OttieniCartellaProgetto(string sottoCartella)
+    {
+        string cartellaBase = OttieniCartellaProgettoBase();
+        string cartellaFinale = Path.Combine(cartellaBase, sottoCartella);
+        
+        if (!Directory.Exists(cartellaFinale))
+            Directory.CreateDirectory(cartellaFinale);
+            
+        return cartellaFinale;
+    }
+
+    private async Task CaricaFile(InputFileChangeEventArgs e, string categoria)
+    {
+        string cartellaDestinazione = OttieniCartellaProgetto(categoria);
+        int fileCaricati = 0;
+
+        foreach (var file in e.GetMultipleFiles(20))
+        {
+            try
+            {
+                string estensione = Path.GetExtension(file.Name);
+                string nomeFile = categoria == "Cartamodelli"
+                    ? file.Name
+                    : $"{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid().ToString().Substring(0, 5)}{estensione}";
+                
+                string percorsoCompleto = Path.Combine(cartellaDestinazione, nomeFile);
+
+                using var fileStream = new FileStream(percorsoCompleto, FileMode.Create);
+                await file.OpenReadStream(maxAllowedSize: 50971520).CopyToAsync(fileStream);
+                fileCaricati++;
+            }
+            catch (Exception ex)
+            {
+                ToastService.Notify(new ToastMessage(ToastType.Danger, "Errore Caricamento", ex.Message));
+            }
+        }
+
+        if (fileCaricati > 0)
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Success, "Upload Completato", $"Caricati {fileCaricati} file nella sezione {categoria}."));
+            CaricaGalleriaDaDisco();
+        }
+    }
+
+    private async Task ConfermaEliminaFile(MediaItem file)
+    {
+        var options = new ConfirmDialogOptions
+        {
+            YesButtonText = "Sì, Elimina",
+            YesButtonColor = ButtonColor.Danger,
+            NoButtonText = "Annulla",
+            NoButtonColor = ButtonColor.Secondary
+        };
+
+        string tipo = file.IsPdf ? "il documento PDF" : "questa foto";
+
+        var conferma = await dialog.ShowAsync(
+            title: "Conferma Eliminazione",
+            message1: $"Vuoi eliminare definitivamente {tipo}?",
+            message2: "Il file verrà cancellato dal tuo PC in modo permanente.",
+            confirmDialogOptions: options);
+
+        if (conferma)
+        {
+            try
+            {
+                if (File.Exists(file.PathFile))
+                {
+                    File.Delete(file.PathFile);
+                    ToastService.Notify(new ToastMessage(ToastType.Danger, "File Eliminato", "Il file è stato rimosso correttamente."));
+                    CaricaGalleriaDaDisco();
+                }
+            }
+            catch (Exception ex)
+            {
+                ToastService.Notify(new ToastMessage(ToastType.Danger, "Errore Eliminazione", $"Impossibile cancellare: {ex.Message}"));
+            }
+        }
+    }
+
+    private void CaricaGalleriaDaDisco()
+    {
+        fileCartamodelli = LeggiMedia("Cartamodelli");
+        fotoReference = LeggiMedia("Reference");
+        fotoWIP = LeggiMedia("WIP");
+        fotoConclusi = LeggiMedia("Conclusi");
+    }
+
+    private List<MediaItem> LeggiMedia(string categoria)
+    {
+        var lista = new List<MediaItem>();
+        string cartella = OttieniCartellaProgetto(categoria);
+
+        foreach (var file in Directory.GetFiles(cartella))
+        {
+            try
+            {
+                string estensione = Path.GetExtension(file).ToLower();
+                
+                if (estensione == ".pdf")
+                {
+                    lista.Add(new MediaItem
+                    {
+                        PathFile = file,
+                        NomeFile = Path.GetFileName(file),
+                        IsPdf = true
+                    });
+                }
+                else
+                {
+                    byte[] imageBytes = File.ReadAllBytes(file);
+                    string base64String = Convert.ToBase64String(imageBytes);
+                    string extNoDot = estensione.Replace(".", "");
+                    
+                    lista.Add(new MediaItem
+                    {
+                        PathFile = file,
+                        NomeFile = Path.GetFileName(file),
+                        Base64 = $"data:image/{extNoDot};base64,{base64String}",
+                        IsPdf = false
+                    });
+                }
+            }
+            catch { /* Ignora i file non leggibili */ }
+        }
+
+        return lista;
+    }
+}

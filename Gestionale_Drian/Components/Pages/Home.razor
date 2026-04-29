@@ -1,0 +1,215 @@
+﻿@page "/"
+@using Gestionale_Drian.Data
+@using Gestionale_Drian.Services
+@using Microsoft.Maui.Storage
+@using BlazorBootstrap
+@inject ArticoliService ArticoliService
+@inject MovimentiService MovimentiService
+@inject AssociatiService AssociatiService
+@inject ProgettiService ProgettiService
+@inject NavigationManager NavManager
+@inject TransazioniService TransazioniService
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="m-0 text-primary fw-bold"><i class="bi bi-speedometer2 me-2"></i> Cruscotto Associazione</h3>
+    <span class="text-muted hover-card p-2 rounded shadow-sm border bg-white" style="cursor: pointer;" @onclick='() => NavManager.NavigateTo("/calendario")'>
+        <i class="bi bi-calendar3 text-primary me-2"></i> <span class="fw-bold">@DateTime.Now.ToString("dd MMMM yyyy")</span>
+    </span>
+</div>
+
+@if (inCaricamento)
+{
+    <div class="text-center mt-5"><div class="spinner-border text-primary"></div></div>
+}
+else
+{
+    <div class="row g-3 mb-4">
+        <div class="col-md-3" style="cursor: pointer;" @onclick='() => NavManager.NavigateTo("/impostazioni-fiera")'>
+            <div class="card border-0 shadow-sm h-100 border-start border-primary border-4 hover-card bg-light">
+                <div class="card-body">
+                    <div class="text-primary small fw-bold text-uppercase mb-1">@fieraTitoloCard</div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h3 class="mb-0 fw-bold @fieraColoreTesto">@fieraValoreCard</h3>
+                        <Icon Name="@(fieraValoreCard == "IN CORSO" ? IconName.Fire : IconName.CalendarEvent)" Class="fs-2 text-primary opacity-50" />
+                    </div>
+                    <div class="small text-muted mt-2">@fieraSottotitoloCard</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3" style="cursor: pointer;" @onclick='() => NavManager.NavigateTo("/bilancio")'>
+            <div class="card border-0 shadow-sm h-100 border-start @(bilancioTotale >= 0 ? "border-success" : "border-danger") border-4 hover-card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <div class="text-muted small fw-bold text-uppercase">Bilancio</div>
+                        <select class="form-select form-select-sm border-0 bg-light w-auto p-0 ps-1" @bind="filtroTempo" @bind:after="CalcolaStatistiche" @onclick:stopPropagation="true">
+                            <option value="Sempre">Sempre</option>
+                            <option value="Mese">Mese</option>
+                            <option value="6Mesi">6 Mesi</option>
+                        </select>
+                    </div>
+                    <h3 class="mb-0 fw-bold @(bilancioTotale >= 0 ? "text-success" : "text-danger")">@bilancioTotale.ToString("C")</h3>
+                    <div class="small mt-2 fw-semibold d-flex justify-content-between">
+                        <span class="text-success">↑ @ricaviProgetti.ToString("C0")</span>
+                        <span class="text-danger">↓ @speseMateriali.ToString("C0")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3" style="cursor: pointer;" @onclick='() => NavManager.NavigateTo("/associati")'>
+            <div class="card border-0 shadow-sm h-100 border-start border-info border-4 hover-card">
+                <div class="card-body">
+                    <div class="text-muted small fw-bold text-uppercase mb-1">Associati</div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h3 class="mb-0 fw-bold text-info">@totaleAssociati</h3>
+                        <Icon Name="IconName.PeopleFill" Class="fs-2 text-info opacity-50" />
+                    </div>
+                    <div class="small text-muted mt-2">Membri registrati</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3" style="cursor: pointer;" @onclick='() => NavManager.NavigateTo("/inventario")'>
+            <div class="card border-0 shadow-sm h-100 border-start border-danger border-4 hover-card">
+                <div class="card-body">
+                    <div class="text-muted small fw-bold text-uppercase mb-1">Allarmi Scorte</div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h3 class="mb-0 fw-bold @(allarmiScorte > 0 ? "text-danger" : "text-success")">@allarmiScorte</h3>
+                        <Icon Name="IconName.ExclamationTriangleFill" Class="@(allarmiScorte > 0 ? "fs-2 text-danger opacity-50" : "fs-2 text-success opacity-50")" />
+                    </div>
+                    <div class="small text-muted mt-2">Materiali in esaurimento</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-md-7">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-bottom-0 pt-3">
+                    <h6 class="fw-bold text-primary mb-0"><i class="bi bi-tools me-2"></i>Progetti in Lavorazione</h6>
+                </div>
+                <div class="card-body">
+                    @if (!progettiInCorso.Any())
+                    {
+                        <div class="text-muted text-center py-3">Tutto completato!</div>
+                    }
+                    else
+                    {
+                        <table class="table table-sm table-hover align-middle">
+                            <thead><tr class="text-muted small"><th>Progetto</th><th>Valore</th><th>Committente</th></tr></thead>
+                            <tbody>
+                                @foreach (var p in progettiInCorso.Take(5))
+                                {
+                                    <tr style="cursor: pointer;" @onclick='() => NavManager.NavigateTo($"/progetto/{p.Id}")'>
+                                        <td class="fw-bold">@p.Titolo</td>
+                                        <td>@p.PrezzoTotale.ToString("C")</td>
+                                        <td>
+                                            <span class="badge bg-secondary-subtle text-secondary border">
+                                                <i class="bi bi-person-circle me-1"></i>@(p.Membri?.FirstOrDefault()?.Cognome ?? "N/D")
+                                            </span>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-5">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-bottom-0 pt-3">
+                    <h6 class="fw-bold text-primary mb-0"><i class="bi bi-clock-history me-2"></i>Timeline Stock</h6>
+                </div>
+                <div class="card-body p-0 pt-2">
+                    <ul class="list-group list-group-flush">
+                        @foreach (var m in ultimiMovimenti)
+                        {
+                            <li class="list-group-item d-flex justify-content-between align-items-center py-2 border-0">
+                                <div><div class="fw-bold small">@m.Articolo?.Nome</div><div class="text-muted" style="font-size:0.7rem">@m.Data.ToString("dd/MM") - @m.TipoOperazione</div></div>
+                                <span class="badge @(m.TipoOperazione.Contains("Carico") ? "bg-success" : "bg-danger")">@m.Quantita</span>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .hover-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 .5rem 1rem rgba(0,0,0,.15) !important;
+        transition: 0.2s;
+    }
+</style>
+
+@code {
+    private bool inCaricamento = true;
+    private string filtroTempo = "Sempre";
+    private string fieraTitoloCard = "Evento";
+    private string fieraValoreCard = "-";
+    private string fieraSottotitoloCard = "";
+    private string fieraColoreTesto = "";
+    private decimal ricaviProgetti, speseMateriali, bilancioTotale;
+    private int allarmiScorte, totaleAssociati;
+    private List<Progetto> progettiInCorso = new();
+    private List<Movimento> ultimiMovimenti = new();
+
+    protected override async Task OnInitializedAsync() { await CalcolaStatistiche(); CalcolaCountdownFiera(); }
+
+    private void CalcolaCountdownFiera()
+    {
+        string nome = Preferences.Default.Get("Evento_Nome", "");
+        string inizio = Preferences.Default.Get("Evento_Inizio", "");
+        string fine = Preferences.Default.Get("Evento_Fine", "");
+        if (string.IsNullOrEmpty(nome) || !DateTime.TryParse(inizio, out DateTime dIn) || !DateTime.TryParse(fine, out DateTime dFi))
+        {
+            fieraTitoloCard = "Prossimo Evento"; fieraValoreCard = "-"; fieraSottotitoloCard = "Imposta un evento"; return;
+        }
+        fieraTitoloCard = nome;
+        if (DateTime.Today > dFi) { fieraValoreCard = "FINITO"; fieraColoreTesto = "text-muted"; }
+        else if (DateTime.Today >= dIn) { fieraValoreCard = "IN CORSO"; fieraColoreTesto = "text-danger"; }
+        else { fieraValoreCard = (dIn - DateTime.Today).Days.ToString(); fieraSottotitoloCard = "Giorni alla partenza"; fieraColoreTesto = "text-primary"; }
+    }
+
+    private async Task CalcolaStatistiche()
+    {
+        inCaricamento = true;
+        DateTime limite = filtroTempo switch { "Mese" => DateTime.Today.AddMonths(-1), "6Mesi" => DateTime.Today.AddMonths(-6), _ => DateTime.MinValue };
+        
+        var art = await ArticoliService.GetArticoliAsync();
+        allarmiScorte = art.Count(a => a.QuantitaInMagazzino <= 2);
+        
+        var prog = await ProgettiService.GetProgettiAsync();
+        progettiInCorso = prog.Where(p => !p.IsConsegnato).ToList();
+        
+        // 1. Calcolo Entrate (Progetti consegnati + Transazioni manuali in entrata)
+        decimal entrateProgetti = prog.Where(p => p.IsConsegnato && p.DataConsegna >= limite).Sum(p => p.PrezzoTotale);
+        
+        // 2. Calcolo Uscite (Acquisto materiali)
+        var mov = await MovimentiService.GetMovimentiAsync();
+        ultimiMovimenti = mov.Take(5).ToList();
+        decimal usciteMateriali = mov.Where(m => m.TipoOperazione == "Carico" && m.Data >= limite).Sum(m => m.Quantita * (m.Articolo?.Prezzo ?? 0));
+
+        // 3. Aggiunta Operazioni Custom (Transazioni Finanziarie)
+        var transazioniCustom = await TransazioniService.GetTransazioniAsync();
+        var transazioniFiltrate = transazioniCustom.Where(t => t.Data >= limite).ToList();
+        
+        decimal entrateExtra = transazioniFiltrate.Where(t => t.IsEntrata).Sum(t => t.Importo);
+        decimal usciteExtra = transazioniFiltrate.Where(t => !t.IsEntrata).Sum(t => Math.Abs(t.Importo));
+
+        // 4. Aggregazione finali per la UI
+        ricaviProgetti = entrateProgetti + entrateExtra;
+        speseMateriali = usciteMateriali + usciteExtra;
+        bilancioTotale = ricaviProgetti - speseMateriali;
+        
+        totaleAssociati = (await AssociatiService.GetAssociatiAsync()).Count;
+        
+        inCaricamento = false;
+    }
+}
